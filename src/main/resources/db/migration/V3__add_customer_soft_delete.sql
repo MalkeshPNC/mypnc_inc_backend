@@ -1,0 +1,2 @@
+ALTER TABLE tblcustomers
+    ADD COLUMN isDeleted TINYINT(1) NOT NULL DEFAULT 0;
