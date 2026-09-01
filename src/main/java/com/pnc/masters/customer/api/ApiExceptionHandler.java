@@ -8,6 +8,7 @@ import com.pnc.masters.document.api.DocumentValidationException;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import com.pnc.masters.security.api.DuplicateEmailException;
 import com.pnc.masters.security.api.InvalidCredentialsException;
+import com.pnc.masters.security.api.InvalidResetTokenException;
 import com.pnc.masters.security.api.RoleConflictException;
 import com.pnc.masters.security.api.RoleNotFoundException;
 import com.pnc.masters.security.api.UserNotFoundException;
@@ -62,6 +63,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidCredentials(InvalidCredentialsException exception) {
         return response(HttpStatus.UNAUTHORIZED, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(InvalidResetTokenException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidResetToken(InvalidResetTokenException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(DuplicateEmailException.class)

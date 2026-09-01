@@ -2,7 +2,10 @@ package com.pnc.masters.security;
 
 import com.pnc.masters.security.api.AuthResponse;
 import com.pnc.masters.security.api.AuthUserResponse;
+import com.pnc.masters.security.api.ForgotPasswordRequest;
 import com.pnc.masters.security.api.LoginRequest;
+import com.pnc.masters.security.api.MessageResponse;
+import com.pnc.masters.security.api.ResetPasswordRequest;
 import com.pnc.masters.security.api.SignupRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
@@ -17,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     @PostMapping("/signup")
@@ -30,6 +35,16 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/forgot-password")
+    public MessageResponse forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return passwordResetService.forgotPassword(request);
+    }
+
+    @PostMapping("/reset-password")
+    public MessageResponse resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        return passwordResetService.resetPassword(request);
     }
 
     @GetMapping("/me")

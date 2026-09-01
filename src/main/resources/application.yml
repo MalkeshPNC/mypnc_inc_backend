@@ -45,3 +45,5 @@ auth:
   jwt-expiration-ms: ${JWT_EXPIRATION:28800000}
   bootstrap-email: ${AUTH_BOOTSTRAP_EMAIL:admin@mypncinc.local}
   bootstrap-password: ${AUTH_BOOTSTRAP_PASSWORD:Admin123!}
+  reset-link-base-url: ${AUTH_RESET_LINK_BASE_URL:http://localhost:4200}
+  reset-token-ttl-ms: ${AUTH_RESET_TOKEN_TTL:3600000}
