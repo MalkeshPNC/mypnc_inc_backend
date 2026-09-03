@@ -2,9 +2,12 @@ package com.pnc.masters.security;
 
 import com.pnc.masters.security.api.AuthResponse;
 import com.pnc.masters.security.api.AuthUserResponse;
+import com.pnc.masters.security.api.ChangePasswordRequest;
 import com.pnc.masters.security.api.DuplicateEmailException;
 import com.pnc.masters.security.api.InvalidCredentialsException;
 import com.pnc.masters.security.api.LoginRequest;
+import com.pnc.masters.security.api.MessageResponse;
+import com.pnc.masters.security.api.ProfileResponse;
 import com.pnc.masters.security.api.RoleNotFoundException;
 import com.pnc.masters.security.api.SignupRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -65,12 +68,23 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public AuthUserResponse me(Long userId) {
+    public ProfileResponse me(Long userId) {
+        return toProfileResponse(requireEnabledUser(userId));
+    }
+
+    public MessageResponse changePassword(Long userId, ChangePasswordRequest request) {
+        AppUser user = requireEnabledUser(userId);
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        userRepository.save(user);
+        return new MessageResponse("Your password has been updated.");
+    }
+
+    private AppUser requireEnabledUser(Long userId) {
         AppUser user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
         if (!user.isEnabled()) {
             throw new InvalidCredentialsException();
         }
-        return toUserResponse(user);
+        return user;
     }
 
     AuthResponse toAuthResponse(AppUser user) {
@@ -85,5 +99,21 @@ public class AuthService {
                 .sorted()
                 .toList();
         return new AuthUserResponse(user.getUserId(), user.getEmail(), user.getDisplayName(), roles);
+    }
+
+    static ProfileResponse toProfileResponse(AppUser user) {
+        return new ProfileResponse(
+                user.getUserId(),
+                user.getEmail(),
+                user.getDisplayName(),
+                user.getDateOfJoining(),
+                user.getDepartment(),
+                user.getBranch(),
+                user.getHomeAddress(),
+                user.getDateOfBirth(),
+                user.getDesignation(),
+                user.getRegularTiming(),
+                user.getContactNumber()
+        );
     }
 }
