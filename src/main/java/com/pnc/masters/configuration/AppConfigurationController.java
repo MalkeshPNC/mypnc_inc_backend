@@ -1,10 +1,16 @@
 package com.pnc.masters.configuration;
 
+import com.pnc.masters.configuration.api.ConfigurationBundleResponse;
 import com.pnc.masters.configuration.api.ConfigurationCreateRequest;
 import com.pnc.masters.configuration.api.ConfigurationResponse;
 import com.pnc.masters.configuration.api.ConfigurationUpdateRequest;
+import com.pnc.masters.configuration.api.SubConfigurationEntryRequest;
+import com.pnc.masters.configuration.api.SubConfigurationEntryResponse;
+import com.pnc.masters.configuration.api.SubConfigurationTypeRequest;
+import com.pnc.masters.configuration.api.SubConfigurationTypeResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,21 +22,28 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/configurations")
 public class AppConfigurationController {
 
     private final AppConfigurationService configurationService;
+    private final SubConfigurationService subConfigurationService;
 
-    public AppConfigurationController(AppConfigurationService configurationService) {
+    public AppConfigurationController(
+            AppConfigurationService configurationService,
+            SubConfigurationService subConfigurationService
+    ) {
         this.configurationService = configurationService;
+        this.subConfigurationService = subConfigurationService;
     }
 
     @GetMapping
-    public List<ConfigurationResponse> findAll() {
-        return configurationService.findAll();
+    public ConfigurationBundleResponse findAll() {
+        return new ConfigurationBundleResponse(
+                configurationService.findAll(),
+                subConfigurationService.findAllTypes()
+        );
     }
 
     @PostMapping
@@ -39,6 +52,37 @@ public class AppConfigurationController {
         URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{key}")
                 .buildAndExpand(response.configKey()).toUri();
         return ResponseEntity.created(location).body(response);
+    }
+
+    @PostMapping("/types")
+    public ResponseEntity<SubConfigurationTypeResponse> createType(
+            @Valid @RequestBody SubConfigurationTypeRequest request,
+            Authentication authentication
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        SubConfigurationTypeResponse response = subConfigurationService.createType(request, userId);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{typeId}")
+                .buildAndExpand(response.typeId()).toUri();
+        return ResponseEntity.created(location).body(response);
+    }
+
+    @PostMapping("/types/{typeId}/entries")
+    public ResponseEntity<SubConfigurationEntryResponse> createEntry(
+            @PathVariable Long typeId,
+            @Valid @RequestBody SubConfigurationEntryRequest request,
+            Authentication authentication
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        SubConfigurationEntryResponse response = subConfigurationService.createEntry(typeId, request, userId);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{entryId}")
+                .buildAndExpand(response.entryId()).toUri();
+        return ResponseEntity.created(location).body(response);
+    }
+
+    @DeleteMapping("/types/{typeId}/entries/{entryId}")
+    public ResponseEntity<Void> deleteEntry(@PathVariable Long typeId, @PathVariable Long entryId) {
+        subConfigurationService.deleteEntry(typeId, entryId);
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{key:.+}")

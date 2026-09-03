@@ -2,6 +2,10 @@ package com.pnc.masters.customer.api;
 
 import com.pnc.masters.configuration.api.ConfigurationKeyExistsException;
 import com.pnc.masters.configuration.api.ConfigurationNotFoundException;
+import com.pnc.masters.configuration.api.SubConfigurationEntryNotFoundException;
+import com.pnc.masters.configuration.api.SubConfigurationTypeExistsException;
+import com.pnc.masters.configuration.api.SubConfigurationTypeNotFoundException;
+import com.pnc.masters.configuration.api.SubConfigurationValidationException;
 import com.pnc.masters.contact.api.ContactNotFoundException;
 import com.pnc.masters.document.api.DocumentNotFoundException;
 import com.pnc.masters.document.api.DocumentValidationException;
@@ -70,6 +74,26 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ConfigurationKeyExistsException.class)
     public ResponseEntity<Map<String, Object>> handleConfigurationKeyExists(ConfigurationKeyExistsException exception) {
         return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationTypeNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigTypeNotFound(SubConfigurationTypeNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationEntryNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigEntryNotFound(SubConfigurationEntryNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationTypeExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigTypeExists(SubConfigurationTypeExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigValidation(SubConfigurationValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
