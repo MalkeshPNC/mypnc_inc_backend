@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
@@ -74,7 +75,8 @@ public class Customer {
     private List<CustomerSalesPerson> salesPersons = new ArrayList<>();
 
     @PrePersist
-    void setEntryDate() {
+    @PreUpdate
+    void ensureEntryDate() {
         if (custEntryDt == null) {
             custEntryDt = LocalDateTime.now();
         }

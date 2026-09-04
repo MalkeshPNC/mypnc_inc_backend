@@ -67,6 +67,32 @@ class NcMasterServiceTest {
     }
 
     @Test
+    void checkNcNumberNormalizesBeforeLookup() {
+        when(ncMasterRepository.existsByNcNumberIgnoreCase("NC-100")).thenReturn(true);
+
+        var response = service.checkNcNumber(" nc-100 ", null);
+
+        assertThat(response.ncNumber()).isEqualTo("NC-100");
+        assertThat(response.exists()).isTrue();
+    }
+
+    @Test
+    void checkNcNumberIgnoresTheRecordBeingEdited() {
+        when(ncMasterRepository.existsByNcNumberIgnoreCaseAndNcIdNot("NC-200", 2L)).thenReturn(false);
+
+        var response = service.checkNcNumber("NC-200", 2L);
+
+        assertThat(response.exists()).isFalse();
+    }
+
+    @Test
+    void checkNcNumberTreatsBlankAsAvailable() {
+        var response = service.checkNcNumber("   ", null);
+
+        assertThat(response.exists()).isFalse();
+    }
+
+    @Test
     void updateRejectsDuplicateNumber() {
         NcMaster existing = new NcMaster();
         existing.setNcId(2L);

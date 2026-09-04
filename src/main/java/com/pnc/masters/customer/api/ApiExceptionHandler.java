@@ -11,6 +11,7 @@ import com.pnc.masters.document.api.DocumentNotFoundException;
 import com.pnc.masters.document.api.DocumentValidationException;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
+import com.pnc.masters.salesperson.api.SalesPersonInUseException;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import com.pnc.masters.security.api.DuplicateEmailException;
 import com.pnc.masters.security.api.InvalidCredentialsException;
@@ -44,6 +45,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(SalesPersonNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleSalesPersonNotFound(SalesPersonNotFoundException exception) {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SalesPersonInUseException.class)
+    public ResponseEntity<Map<String, Object>> handleSalesPersonInUse(SalesPersonInUseException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(DocumentNotFoundException.class)

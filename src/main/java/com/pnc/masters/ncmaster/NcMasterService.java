@@ -3,6 +3,7 @@ package com.pnc.masters.ncmaster;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcMasterResponse;
+import com.pnc.masters.ncmaster.api.NcNumberAvailabilityResponse;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
 import com.pnc.masters.security.AppUser;
 import com.pnc.masters.security.AppUserRepository;
@@ -27,6 +28,22 @@ public class NcMasterService {
     @Transactional(readOnly = true)
     public List<NcMasterResponse> findAll() {
         return ncMasterRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toResponse).toList();
+    }
+
+    /**
+     * Live duplicate check for the NC form, so concurrent editors see a collision
+     * before they submit rather than getting a conflict from {@link #create}.
+     */
+    @Transactional(readOnly = true)
+    public NcNumberAvailabilityResponse checkNcNumber(String ncNumber, Long excludeNcId) {
+        String normalized = normalizeNumber(ncNumber);
+        if (normalized.isEmpty()) {
+            return new NcNumberAvailabilityResponse(normalized, false);
+        }
+        boolean exists = excludeNcId == null
+                ? ncMasterRepository.existsByNcNumberIgnoreCase(normalized)
+                : ncMasterRepository.existsByNcNumberIgnoreCaseAndNcIdNot(normalized, excludeNcId);
+        return new NcNumberAvailabilityResponse(normalized, exists);
     }
 
     public NcMasterResponse create(NcMasterRequest request, Long userId) {

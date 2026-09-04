@@ -2,6 +2,7 @@ package com.pnc.masters.ncmaster;
 
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcMasterResponse;
+import com.pnc.masters.ncmaster.api.NcNumberAvailabilityResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -30,6 +32,14 @@ public class NcMasterController {
     @GetMapping
     public List<NcMasterResponse> findAll() {
         return ncMasterService.findAll();
+    }
+
+    @GetMapping("/exists")
+    public NcNumberAvailabilityResponse exists(
+            @RequestParam String ncNumber,
+            @RequestParam(required = false) Long excludeNcId
+    ) {
+        return ncMasterService.checkNcNumber(ncNumber, excludeNcId);
     }
 
     @PostMapping

@@ -68,7 +68,10 @@ public class CustomerService {
         customer.setCompanyLogo(request.companyLogo());
         customer.setSalesPersonDefaultCommission(request.salesPersonDefaultCommission());
         applySalesPersonAssignments(customer, request.salesPersons());
-        customer.setCustEntryDt(request.custEntryDt());
+        // cust_entry_dt is NOT NULL and defaulted on insert, so an update must not clear it.
+        if (request.custEntryDt() != null) {
+            customer.setCustEntryDt(request.custEntryDt());
+        }
         customer.setReferredBy(request.referredBy());
         customer.setRemarks(request.remarks());
         customer.setAddress(request.address());

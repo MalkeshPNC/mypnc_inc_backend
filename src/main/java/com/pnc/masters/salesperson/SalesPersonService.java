@@ -1,5 +1,7 @@
 package com.pnc.masters.salesperson;
 
+import com.pnc.masters.customer.CustomerSalesPersonRepository;
+import com.pnc.masters.salesperson.api.SalesPersonInUseException;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import com.pnc.masters.salesperson.api.SalesPersonRequest;
 import com.pnc.masters.salesperson.api.SalesPersonResponse;
@@ -13,9 +15,12 @@ import java.util.List;
 public class SalesPersonService {
 
     private final SalesPersonRepository salesPersonRepository;
+    private final CustomerSalesPersonRepository customerSalesPersonRepository;
 
-    public SalesPersonService(SalesPersonRepository salesPersonRepository) {
+    public SalesPersonService(SalesPersonRepository salesPersonRepository,
+                              CustomerSalesPersonRepository customerSalesPersonRepository) {
         this.salesPersonRepository = salesPersonRepository;
+        this.customerSalesPersonRepository = customerSalesPersonRepository;
     }
 
     @Transactional(readOnly = true)
@@ -41,7 +46,11 @@ public class SalesPersonService {
     }
 
     public void delete(Long id) {
-        salesPersonRepository.delete(getSalesPerson(id));
+        SalesPerson salesPerson = getSalesPerson(id);
+        if (customerSalesPersonRepository.existsBySalesPersonSpId(id)) {
+            throw new SalesPersonInUseException(id);
+        }
+        salesPersonRepository.delete(salesPerson);
     }
 
     public SalesPerson getSalesPerson(Long id) {

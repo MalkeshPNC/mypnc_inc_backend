@@ -15,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
 
@@ -78,6 +79,26 @@ class CustomerServiceTest {
         assertThatThrownBy(() -> customerService.findById(99L))
                 .isInstanceOf(CustomerNotFoundException.class)
                 .hasMessage("Customer with id 99 was not found");
+    }
+
+    @Test
+    void updateKeepsExistingEntryDateWhenRequestOmitsIt() {
+        LocalDateTime entryDate = LocalDateTime.of(2026, 1, 15, 9, 30);
+        Customer existing = new Customer();
+        existing.setCustId(6L);
+        existing.setCustomer("Acme Inc");
+        existing.setCustEntryDt(entryDate);
+        SalesPerson salesPerson = new SalesPerson();
+        salesPerson.setSpId(5L);
+        salesPerson.setSalesPerson("Sales Person");
+        when(salesPersonRepository.findById(5L)).thenReturn(Optional.of(salesPerson));
+        when(customerRepository.findByCustIdAndIsDeletedFalse(6L)).thenReturn(Optional.of(existing));
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CustomerResponse response = customerService.update(6L, request("Acme Inc"));
+
+        assertThat(existing.getCustEntryDt()).isEqualTo(entryDate);
+        assertThat(response.custEntryDt()).isEqualTo(entryDate);
     }
 
     @Test
