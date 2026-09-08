@@ -40,6 +40,10 @@ management:
       exposure:
         include: health,info
 
+quote:
+  lock:
+    idle-timeout-ms: ${QUOTE_LOCK_IDLE_TIMEOUT:300000}
+
 auth:
   jwt-secret: ${JWT_SECRET:pnc-masters-dev-jwt-secret-key-32b!!}
   jwt-expiration-ms: ${JWT_EXPIRATION:28800000}

@@ -60,6 +60,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/configurations", "/api/v1/configurations/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/roles", "/api/v1/roles/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/users", "/api/v1/users/**").hasRole("ADMIN")
+                        // Lock release is a DELETE too, so it has to be matched before the admin-only quote delete.
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/quotes/*/lock/force").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/quotes/*/lock").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/quotes/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

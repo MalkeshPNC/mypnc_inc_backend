@@ -1,0 +1,51 @@
+package com.pnc.masters.quote.api;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+
+public record QuoteResponse(
+        Long qid,
+        String quoteNumber,
+        String quoteType,
+        String projectNumber,
+        LocalDate createDate,
+        LocalDate submitDate,
+        Long custId,
+        String customerName,
+        Long contId,
+        String contactName,
+        String customerRfq,
+        Long ncId,
+        String ncNumber,
+        String assyNumber,
+        String pcbNumber,
+        String assyQuoteStatus,
+        String assyQuotePerson,
+        String pcbQuoteNumber,
+        String pcbQuoteStatus,
+        String pcbQuotePerson,
+        String array,
+        BigDecimal salesPercentage,
+        String internalNote1,
+        String internalNote2,
+        String notesToCustomer,
+        String otherNreCharges,
+        LocalDate receivedDate,
+        boolean pncNotes,
+        boolean laborOnly,
+        boolean partsScheduled,
+        boolean feedback,
+        boolean itarc,
+        boolean berryc,
+        String pcbaPlant,
+        String pcbOrigin,
+        String status,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt,
+        List<QuoteQuantityResponse> quantities,
+        List<QuoteHistoryResponse> history,
+        QuoteLockResponse lock
+) {
+}

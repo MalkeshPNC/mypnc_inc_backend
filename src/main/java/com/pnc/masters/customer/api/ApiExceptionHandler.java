@@ -11,6 +11,10 @@ import com.pnc.masters.document.api.DocumentNotFoundException;
 import com.pnc.masters.document.api.DocumentValidationException;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
+import com.pnc.masters.quote.api.QuoteLockedException;
+import com.pnc.masters.quote.api.QuoteNotFoundException;
+import com.pnc.masters.quote.api.QuoteNumberExistsException;
+import com.pnc.masters.quote.api.QuoteValidationException;
 import com.pnc.masters.salesperson.api.SalesPersonInUseException;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import com.pnc.masters.security.api.DuplicateEmailException;
@@ -70,6 +74,34 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NcNumberExistsException.class)
     public ResponseEntity<Map<String, Object>> handleNcNumberExists(NcNumberExistsException exception) {
         return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteNotFound(QuoteNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteNumberExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteNumberExists(QuoteNumberExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteValidation(QuoteValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteLockedException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteLocked(QuoteLockedException exception) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("qid", exception.getQid());
+        if (exception.getLockedByUserId() != null) {
+            details.put("lockedByUserId", exception.getLockedByUserId());
+        }
+        if (exception.getLockedByName() != null) {
+            details.put("lockedByName", exception.getLockedByName());
+        }
+        return response(HttpStatus.CONFLICT, exception.getMessage(), details);
     }
 
     @ExceptionHandler(ConfigurationNotFoundException.class)
