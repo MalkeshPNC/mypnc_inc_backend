@@ -17,7 +17,7 @@ public record QuoteQuantityResponse(
         BigDecimal testing,
         BigDecimal confCoat,
         String serviceName,
-        String serviceCharge,
+        BigDecimal serviceCharge,
         BigDecimal subTotal,
         BigDecimal totalSalesPct,
         BigDecimal pcbNre,

@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -107,8 +108,8 @@ class QuoteServiceTest {
     void createRejectsMissingCreateDate() {
         QuoteRequest withoutDate = new QuoteRequest(
                 "2026NC-100", null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null,
-                false, false, false, false, false, false, null, null, null, null
+                null,                 null, null, null, null, null, null, null, null, null, null,
+                false, false, false, false, false, false, false, null, null, null, null
         );
 
         assertThatThrownBy(() -> quoteService.create(withoutDate, 7L))
@@ -210,6 +211,66 @@ class QuoteServiceTest {
     }
 
     @Test
+    void updateDiscountsLaborAndMarksUpPartsInTheSubTotal() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        // parts 100 +10% = 110, labor 200 -25% = 150, plus pcb 10 and service 5.
+        quoteService.update(12L, withCommission(null,
+                calcRow(2, "10", "100", "200", "25", "10", "5", "20")), 7L);
+
+        QuoteQuantity row = existing.getQuantities().get(0);
+        assertThat(row.getSubTotal()).isEqualByComparingTo("275.00");
+        assertThat(row.getTotalSalesPct()).isEqualByComparingTo("275.00");
+        // 275 x 2 units, then the one NRE charge.
+        assertThat(row.getTotal()).isEqualByComparingTo("570.00");
+    }
+
+    @Test
+    void updateAddsTheCommissionOnTopOfTheSubTotal() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, withCommission("10",
+                calcRow(3, "100", null, null, null, null, null, null)), 7L);
+
+        QuoteQuantity row = existing.getQuantities().get(0);
+        assertThat(row.getSubTotal()).isEqualByComparingTo("100.00");
+        assertThat(row.getTotalSalesPct()).isEqualByComparingTo("110.00");
+        assertThat(row.getTotal()).isEqualByComparingTo("330.00");
+    }
+
+    @Test
+    void updateRoundsDerivedAmountsHalfUpToTwoDecimals() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        // 3 x 1.085 = 3.255, which has to land on 3.26 rather than 3.25.
+        quoteService.update(12L, withCommission(null,
+                calcRow(1, null, "3", null, null, "8.5", null, null)), 7L);
+
+        assertThat(existing.getQuantities().get(0).getSubTotal()).isEqualByComparingTo("3.26");
+    }
+
+    @Test
+    void updateTreatsEmptyAmountsAsZero() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, withCommission(null,
+                calcRow(null, null, null, null, null, null, null, null)), 7L);
+
+        QuoteQuantity row = existing.getQuantities().get(0);
+        assertThat(row.getSubTotal()).isEqualByComparingTo("0.00");
+        assertThat(row.getTotalSalesPct()).isEqualByComparingTo("0.00");
+        assertThat(row.getTotal()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
     void updateLetsAnAdminMoveTheCreateDate() {
         Quote existing = existingQuote();
         stubUpdate(existing);
@@ -231,6 +292,40 @@ class QuoteServiceTest {
         quoteService.update(12L, request("2026NC-100", List.of()), 7L);
 
         assertThat(existing.getCreateDate()).isEqualTo(LocalDate.of(2025, 11, 20));
+    }
+
+    @Test
+    void updateStampsSubmitDateWhenStatusBecomesSubmitted() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, withSubmitted(null), 7L);
+
+        assertThat(existing.getSubmitDate()).isEqualTo(LocalDate.now());
+    }
+
+    @Test
+    void updateKeepsAnExplicitSubmitDate() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+        LocalDate submitted = LocalDate.of(2026, 2, 3);
+
+        quoteService.update(12L, withSubmitted(submitted), 7L);
+
+        assertThat(existing.getSubmitDate()).isEqualTo(submitted);
+    }
+
+    @Test
+    void updateLeavesSubmitDateEmptyForOtherStatuses() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, withStatus("Open", null), 7L);
+
+        assertThat(existing.getSubmitDate()).isNull();
     }
 
     @Test
@@ -279,6 +374,65 @@ class QuoteServiceTest {
         assertThat(entry.getAction()).isEqualTo(QuoteHistory.ACTION_UPDATED);
         assertThat(entry.getAssyQuoteStatus()).isEqualTo("In Progress");
         assertThat(entry.getChangedByName()).isEqualTo("Ada Lovelace");
+    }
+
+    @Test
+    void updateNamesTheMainTableWhenOnlyHeaderFieldsMove() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, request("2026NC-100", List.of()), 7L);
+
+        assertThat(capturedHistory().getChangeSummary()).isEqualTo("Changes in Main table");
+    }
+
+    @Test
+    void updateNamesTheQuantityTableWhenOnlyRowsMove() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+        // The first save settles the header, so the second can only touch rows.
+        quoteService.update(12L, request("2026NC-100", List.of()), 7L);
+
+        quoteService.update(12L, request("2026NC-100", List.of(quantity(0L, 10))), 7L);
+
+        assertThat(lastHistory(2).getChangeSummary()).isEqualTo("Changes in Quantity table");
+    }
+
+    @Test
+    void updateNamesBothTablesWhenTheHeaderAndRowsMoveTogether() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, request("2026NC-100", List.of(quantity(0L, 10))), 7L);
+
+        assertThat(capturedHistory().getChangeSummary())
+                .isEqualTo("Changes in Main table, Changes in Quantity table");
+    }
+
+    @Test
+    void updateRecordsNoChangeSummaryWhenTheSaveChangesNothing() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+        quoteService.update(12L, request("2026NC-100", List.of()), 7L);
+
+        quoteService.update(12L, request("2026NC-100", List.of()), 7L);
+
+        assertThat(lastHistory(2).getChangeSummary()).isNull();
+    }
+
+    @Test
+    void createRecordsNoChangeSummary() {
+        when(quoteRepository.existsByQuoteNumberIgnoreCase("2026NC-100")).thenReturn(false);
+        stubSaveAssigningId();
+        stubEmptyHistory();
+
+        quoteService.create(request("2026NC-100", List.of()), 7L);
+
+        assertThat(capturedHistory().getChangeSummary()).isNull();
     }
 
     @Test
@@ -345,6 +499,13 @@ class QuoteServiceTest {
         return captor.getValue();
     }
 
+    /** The newest entry, for tests that save more than once. */
+    private QuoteHistory lastHistory(int saves) {
+        ArgumentCaptor<QuoteHistory> captor = ArgumentCaptor.forClass(QuoteHistory.class);
+        verify(historyRepository, times(saves)).save(captor.capture());
+        return captor.getAllValues().get(saves - 1);
+    }
+
     private QuoteLock holdLock(Long userId, LocalDateTime lastSeenAt) {
         QuoteLock held = lock(userId, lastSeenAt);
         when(lockRepository.findByQid(12L)).thenReturn(Optional.of(held));
@@ -387,32 +548,65 @@ class QuoteServiceTest {
         return new QuoteQuantityRequest(
                 qtyId, "5", 5, 5, qty,
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ONE, BigDecimal.ONE, "Service", "10", BigDecimal.TEN, BigDecimal.TEN,
-                BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.TEN,
+                BigDecimal.ONE, BigDecimal.ONE, "Service", BigDecimal.TEN,
+                BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
                 "comment", false
         );
     }
 
+    /**
+     * A row holding only the amounts the calculation reads, in record order. The
+     * nulls are deliberate: they double as the empty-cell case.
+     */
+    private static QuoteQuantityRequest calcRow(Integer qty, String pcbCost, String partsCost,
+                                                String laborCost, String laborDiscount,
+                                                String partMarkup, String serviceCharge,
+                                                String pcbNre) {
+        return new QuoteQuantityRequest(
+                0L, null, null, null, qty,
+                dec(pcbCost), dec(partsCost), dec(laborCost), dec(laborDiscount), dec(partMarkup),
+                null, null, null, dec(serviceCharge),
+                dec(pcbNre), null, null, null,
+                null, false
+        );
+    }
+
+    private static BigDecimal dec(String value) {
+        return value == null ? null : new BigDecimal(value);
+    }
+
     private static QuoteRequest request(String quoteNumber, List<QuoteQuantityRequest> quantities) {
-        return request(quoteNumber, quantities, "Open", null);
+        return request(quoteNumber, quantities, "Open", null, null, "5.00");
     }
 
     private static QuoteRequest withStatus(String status, LocalDate receivedDate) {
-        return request("2026NC-100", List.of(), status, receivedDate);
+        return request("2026NC-100", List.of(), status, null, receivedDate, "5.00");
+    }
+
+    /** A submitted quote, optionally carrying a submit date already. */
+    private static QuoteRequest withSubmitted(LocalDate submitDate) {
+        return request("2026NC-100", List.of(), "Submitted", submitDate, null, "5.00");
+    }
+
+    /** One row and an explicit commission, for the calculation tests. */
+    private static QuoteRequest withCommission(String commission, QuoteQuantityRequest row) {
+        return request("2026NC-100", List.of(row), "Open", null, null, commission);
     }
 
     private static QuoteRequest request(
             String quoteNumber,
             List<QuoteQuantityRequest> quantities,
             String status,
-            LocalDate receivedDate
+            LocalDate submitDate,
+            LocalDate receivedDate,
+            String commission
     ) {
         return new QuoteRequest(
                 quoteNumber,
                 "Standard",
                 "PRJ-1",
                 LocalDate.of(2026, 1, 5),
-                null,
+                submitDate,
                 3L,
                 "Acme Inc",
                 4L,
@@ -426,13 +620,13 @@ class QuoteServiceTest {
                 "PQ-1",
                 "In Progress",
                 "2x2",
-                new BigDecimal("5.00"),
+                dec(commission),
                 "note 1",
                 "note 2",
                 "customer note",
                 "None",
                 receivedDate,
-                false, false, false, false, false, false,
+                false, false, false, false, false, false, false,
                 "Plant A",
                 "USA",
                 status,

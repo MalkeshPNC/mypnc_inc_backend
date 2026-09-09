@@ -88,8 +88,9 @@ public class Quote {
     @Column(name = "quote_array", length = 80)
     private String quoteArray;
 
-    @Column(name = "sales_percentage", precision = 6, scale = 2)
-    private BigDecimal salesPercentage;
+    /** Rate applied to every quantity line's sub total to reach Total (S%). */
+    @Column(name = "commission_percentage", precision = 6, scale = 2)
+    private BigDecimal commissionPercentage;
 
     @Column(name = "internal_note1", columnDefinition = "TEXT")
     private String internalNote1;
@@ -123,6 +124,9 @@ public class Quote {
 
     @Column(name = "berryc", nullable = false)
     private boolean berryc = false;
+
+    @Column(name = "sams_review", nullable = false)
+    private boolean samsReview = false;
 
     @Column(name = "pcba_plant", length = 120)
     private String pcbaPlant;
@@ -206,8 +210,8 @@ public class Quote {
     public void setPcbQuotePerson(String pcbQuotePerson) { this.pcbQuotePerson = pcbQuotePerson; }
     public String getQuoteArray() { return quoteArray; }
     public void setQuoteArray(String quoteArray) { this.quoteArray = quoteArray; }
-    public BigDecimal getSalesPercentage() { return salesPercentage; }
-    public void setSalesPercentage(BigDecimal salesPercentage) { this.salesPercentage = salesPercentage; }
+    public BigDecimal getCommissionPercentage() { return commissionPercentage; }
+    public void setCommissionPercentage(BigDecimal commissionPercentage) { this.commissionPercentage = commissionPercentage; }
     public String getInternalNote1() { return internalNote1; }
     public void setInternalNote1(String internalNote1) { this.internalNote1 = internalNote1; }
     public String getInternalNote2() { return internalNote2; }
@@ -230,6 +234,8 @@ public class Quote {
     public void setItarc(boolean itarc) { this.itarc = itarc; }
     public boolean isBerryc() { return berryc; }
     public void setBerryc(boolean berryc) { this.berryc = berryc; }
+    public boolean isSamsReview() { return samsReview; }
+    public void setSamsReview(boolean samsReview) { this.samsReview = samsReview; }
     public String getPcbaPlant() { return pcbaPlant; }
     public void setPcbaPlant(String pcbaPlant) { this.pcbaPlant = pcbaPlant; }
     public String getPcbOrigin() { return pcbOrigin; }

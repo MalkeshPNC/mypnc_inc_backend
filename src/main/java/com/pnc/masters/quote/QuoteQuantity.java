@@ -61,8 +61,8 @@ public class QuoteQuantity {
     @Column(name = "service_name", length = 120)
     private String serviceName;
 
-    @Column(name = "service_charge", length = 80)
-    private String serviceCharge;
+    @Column(name = "service_charge", precision = 12, scale = 2)
+    private BigDecimal serviceCharge;
 
     @Column(name = "sub_total", precision = 12, scale = 2)
     private BigDecimal subTotal;
@@ -119,8 +119,8 @@ public class QuoteQuantity {
     public void setConfCoat(BigDecimal confCoat) { this.confCoat = confCoat; }
     public String getServiceName() { return serviceName; }
     public void setServiceName(String serviceName) { this.serviceName = serviceName; }
-    public String getServiceCharge() { return serviceCharge; }
-    public void setServiceCharge(String serviceCharge) { this.serviceCharge = serviceCharge; }
+    public BigDecimal getServiceCharge() { return serviceCharge; }
+    public void setServiceCharge(BigDecimal serviceCharge) { this.serviceCharge = serviceCharge; }
     public BigDecimal getSubTotal() { return subTotal; }
     public void setSubTotal(BigDecimal subTotal) { this.subTotal = subTotal; }
     public BigDecimal getTotalSalesPct() { return totalSalesPct; }

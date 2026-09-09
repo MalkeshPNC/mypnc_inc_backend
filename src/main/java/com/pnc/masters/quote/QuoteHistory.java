@@ -32,6 +32,10 @@ public class QuoteHistory {
     @Column(name = "action", nullable = false, length = 20)
     private String action;
 
+    /** Which part of the quote the save touched. Null when nothing changed. */
+    @Column(name = "change_summary", length = 120)
+    private String changeSummary;
+
     @Column(name = "status", length = 80)
     private String status;
 
@@ -63,6 +67,8 @@ public class QuoteHistory {
     public void setQid(Long qid) { this.qid = qid; }
     public String getAction() { return action; }
     public void setAction(String action) { this.action = action; }
+    public String getChangeSummary() { return changeSummary; }
+    public void setChangeSummary(String changeSummary) { this.changeSummary = changeSummary; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getAssyQuoteStatus() { return assyQuoteStatus; }

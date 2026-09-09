@@ -4,7 +4,8 @@ import java.math.BigDecimal;
 
 /**
  * A quantity line as submitted by the form. A null or zero {@code qtyId} means
- * the row is new and the server assigns the real id.
+ * the row is new and the server assigns the real id. Sub total, Total (S%) and
+ * Total are absent because the server derives them from the costs below.
  */
 public record QuoteQuantityRequest(
         Long qtyId,
@@ -20,14 +21,11 @@ public record QuoteQuantityRequest(
         BigDecimal testing,
         BigDecimal confCoat,
         String serviceName,
-        String serviceCharge,
-        BigDecimal subTotal,
-        BigDecimal totalSalesPct,
+        BigDecimal serviceCharge,
         BigDecimal pcbNre,
         BigDecimal assyNre,
         BigDecimal stencil,
         BigDecimal otherNre,
-        BigDecimal total,
         String comments,
         Boolean received
 ) {

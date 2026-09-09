@@ -32,8 +32,8 @@ public record QuoteRequest(
         String pcbQuoteNumber,
         String pcbQuoteStatus,
         String array,
-        @Digits(integer = 4, fraction = 2, message = "salesPercentage must have up to 4 integer digits and 2 decimals")
-        BigDecimal salesPercentage,
+        @Digits(integer = 4, fraction = 2, message = "commissionPercentage must have up to 4 integer digits and 2 decimals")
+        BigDecimal commissionPercentage,
         String internalNote1,
         String internalNote2,
         String notesToCustomer,
@@ -45,6 +45,7 @@ public record QuoteRequest(
         Boolean feedback,
         Boolean itarc,
         Boolean berryc,
+        Boolean samsReview,
         String pcbaPlant,
         String pcbOrigin,
         String status,

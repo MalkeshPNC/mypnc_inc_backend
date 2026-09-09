@@ -6,10 +6,15 @@ public record QuoteSummaryResponse(
         Long qid,
         String quoteNumber,
         String quoteType,
+        String projectNumber,
+        LocalDate createDate,
+        LocalDate submitDate,
+        LocalDate receivedDate,
         String customerName,
         String ncNumber,
+        String assyNumber,
+        String pcbNumber,
         String status,
-        LocalDate createDate,
         QuoteLockResponse lock
 ) {
 }

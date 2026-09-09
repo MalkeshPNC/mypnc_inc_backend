@@ -20,8 +20,12 @@ import com.pnc.masters.security.AppUserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -34,8 +38,17 @@ public class QuoteService {
 
     private static final Set<String> CREATE_DATE_ROLES = Set.of("ADMIN");
 
+    /** The quotestatus entry that means the quote went out to the customer. */
+    private static final String SUBMITTED_STATUS = "submitted";
+
     /** The quotestatus entry that means the quote came back from the customer. */
     private static final String RECEIVED_STATUS = "received";
+
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+
+    /** History wording for the two halves of the edit screen. */
+    private static final String MAIN_CHANGE = "Changes in Main table";
+    private static final String QUANTITY_CHANGE = "Changes in Quantity table";
 
     private final QuoteRepository quoteRepository;
     private final QuoteHistoryRepository historyRepository;
@@ -79,7 +92,7 @@ public class QuoteService {
         applyRequest(quote, request, quoteNumber, user);
         quote.setCreatedByUserId(userId);
         Quote saved = quoteRepository.save(quote);
-        recordHistory(saved, QuoteHistory.ACTION_CREATED, userId, user);
+        recordHistory(saved, QuoteHistory.ACTION_CREATED, userId, user, null);
         return toResponse(saved, userId);
     }
 
@@ -92,6 +105,8 @@ public class QuoteService {
         }
         AppUser user = userRepository.findById(userId).orElse(null);
         LocalDate createDate = quote.getCreateDate();
+        List<Object> headerBefore = headerSignature(quote);
+        List<List<Object>> quantitiesBefore = quantitySignature(quote);
         applyRequest(quote, request, quoteNumber, user);
         // Create date is role-gated in the UI, so hold the line here rather than
         // trusting whatever the client posted.
@@ -102,7 +117,8 @@ public class QuoteService {
         quote.setUpdatedByUserId(userId);
         quote.setUpdatedAt(LocalDateTime.now());
         Quote saved = quoteRepository.save(quote);
-        recordHistory(saved, QuoteHistory.ACTION_UPDATED, userId, user);
+        recordHistory(saved, QuoteHistory.ACTION_UPDATED, userId, user,
+                describeChanges(headerBefore, quantitiesBefore, saved));
         return toResponse(saved, userId);
     }
 
@@ -123,6 +139,10 @@ public class QuoteService {
         quote.setProjectNumber(blankToNull(request.projectNumber()));
         quote.setCreateDate(request.createDate());
         quote.setSubmitDate(request.submitDate());
+        // A submitted quote always has a submit date, whatever the client sent.
+        if (quote.getSubmitDate() == null && isStatus(request.status(), SUBMITTED_STATUS)) {
+            quote.setSubmitDate(LocalDate.now());
+        }
         quote.setCustId(request.custId());
         quote.setCustomerName(blankToNull(request.customerName()));
         quote.setContId(request.contId());
@@ -136,14 +156,14 @@ public class QuoteService {
         quote.setPcbQuoteNumber(blankToNull(request.pcbQuoteNumber()));
         quote.setPcbQuoteStatus(blankToNull(request.pcbQuoteStatus()));
         quote.setQuoteArray(blankToNull(request.array()));
-        quote.setSalesPercentage(request.salesPercentage());
+        quote.setCommissionPercentage(request.commissionPercentage());
         quote.setInternalNote1(blankToNull(request.internalNote1()));
         quote.setInternalNote2(blankToNull(request.internalNote2()));
         quote.setNotesToCustomer(blankToNull(request.notesToCustomer()));
         quote.setOtherNreCharges(blankToNull(request.otherNreCharges()));
         quote.setReceivedDate(request.receivedDate());
         // A received quote always has a received date, whatever the client sent.
-        if (quote.getReceivedDate() == null && isReceived(request.status())) {
+        if (quote.getReceivedDate() == null && isStatus(request.status(), RECEIVED_STATUS)) {
             quote.setReceivedDate(LocalDate.now());
         }
         quote.setPncNotes(isTrue(request.pncNotes()));
@@ -152,6 +172,7 @@ public class QuoteService {
         quote.setFeedback(isTrue(request.feedback()));
         quote.setItarc(isTrue(request.itarc()));
         quote.setBerryc(isTrue(request.berryc()));
+        quote.setSamsReview(isTrue(request.samsReview()));
         quote.setPcbaPlant(blankToNull(request.pcbaPlant()));
         quote.setPcbOrigin(blankToNull(request.pcbOrigin()));
         quote.setStatus(blankToNull(request.status()));
@@ -179,20 +200,21 @@ public class QuoteService {
                 .toList();
         quote.getQuantities().removeIf(quantity -> !keptIds.contains(quantity.getQtyId()));
 
+        BigDecimal commission = quote.getCommissionPercentage();
         for (QuoteQuantityRequest row : rows) {
             boolean isNew = row.qtyId() == null || row.qtyId() <= 0;
             QuoteQuantity quantity = isNew ? null : existing.get(row.qtyId());
             if (quantity == null) {
                 quantity = new QuoteQuantity();
-                applyQuantity(quantity, row);
+                applyQuantity(quantity, row, commission);
                 quote.addQuantity(quantity);
             } else {
-                applyQuantity(quantity, row);
+                applyQuantity(quantity, row, commission);
             }
         }
     }
 
-    private void applyQuantity(QuoteQuantity quantity, QuoteQuantityRequest row) {
+    private void applyQuantity(QuoteQuantity quantity, QuoteQuantityRequest row, BigDecimal commission) {
         quantity.setLt(blankToNull(row.lt()));
         quantity.setLtPcb(row.ltPcb());
         quantity.setLtPcba(row.ltPcba());
@@ -205,22 +227,124 @@ public class QuoteService {
         quantity.setTesting(row.testing());
         quantity.setConfCoat(row.confCoat());
         quantity.setServiceName(blankToNull(row.serviceName()));
-        quantity.setServiceCharge(blankToNull(row.serviceCharge()));
-        quantity.setSubTotal(row.subTotal());
-        quantity.setTotalSalesPct(row.totalSalesPct());
+        quantity.setServiceCharge(row.serviceCharge());
         quantity.setPcbNre(row.pcbNre());
         quantity.setAssyNre(row.assyNre());
         quantity.setStencil(row.stencil());
         quantity.setOtherNre(row.otherNre());
-        quantity.setTotal(row.total());
         quantity.setComments(blankToNull(row.comments()));
         quantity.setReceived(isTrue(row.received()));
+        // subTotal, totalSalesPct and total are derived, so whatever the client
+        // posted for them is discarded in favour of the numbers below.
+        recalculate(quantity, commission);
     }
 
-    private void recordHistory(Quote quote, String action, Long userId, AppUser user) {
+    /**
+     * Fills in the three derived amounts. Each one is rounded before it feeds the
+     * next, so the figures on screen add up when someone checks them by hand.
+     */
+    private static void recalculate(QuoteQuantity quantity, BigDecimal commission) {
+        BigDecimal partsNet = plusPercent(quantity.getPartsCost(), quantity.getPartMarkup());
+        BigDecimal laborNet = plusPercent(quantity.getLaborCost(), negate(quantity.getLaborDiscount()));
+        BigDecimal subTotal = money(zeroIfNull(quantity.getPcbCost())
+                .add(partsNet)
+                .add(laborNet)
+                .add(zeroIfNull(quantity.getTesting()))
+                .add(zeroIfNull(quantity.getConfCoat()))
+                .add(zeroIfNull(quantity.getServiceCharge())));
+        BigDecimal totalSalesPct = money(plusPercent(subTotal, commission));
+        BigDecimal total = money(totalSalesPct
+                .multiply(BigDecimal.valueOf(quantity.getQty() == null ? 0 : quantity.getQty()))
+                .add(zeroIfNull(quantity.getPcbNre()))
+                .add(zeroIfNull(quantity.getAssyNre()))
+                .add(zeroIfNull(quantity.getStencil()))
+                .add(zeroIfNull(quantity.getOtherNre())));
+
+        quantity.setSubTotal(subTotal);
+        quantity.setTotalSalesPct(totalSalesPct);
+        quantity.setTotal(total);
+    }
+
+    /** {@code amount + amount * percent / 100}, unrounded so callers decide the scale. */
+    private static BigDecimal plusPercent(BigDecimal amount, BigDecimal percent) {
+        BigDecimal base = zeroIfNull(amount);
+        if (percent == null || percent.signum() == 0) {
+            return base;
+        }
+        // Scale 4 on the factor keeps a two-decimal percentage exact.
+        BigDecimal factor = BigDecimal.ONE.add(percent.divide(HUNDRED, 4, RoundingMode.HALF_UP));
+        return base.multiply(factor);
+    }
+
+    private static BigDecimal negate(BigDecimal value) {
+        return value == null ? null : value.negate();
+    }
+
+    private static BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private static BigDecimal money(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Names the parts of the quote this save touched, so the history reads as
+     * more than a list of timestamps. Null when the save changed nothing.
+     */
+    private static String describeChanges(List<Object> headerBefore, List<List<Object>> quantitiesBefore, Quote saved) {
+        List<String> parts = new ArrayList<>();
+        if (!headerBefore.equals(headerSignature(saved))) {
+            parts.add(MAIN_CHANGE);
+        }
+        if (!quantitiesBefore.equals(quantitySignature(saved))) {
+            parts.add(QUANTITY_CHANGE);
+        }
+        return parts.isEmpty() ? null : String.join(", ", parts);
+    }
+
+    /** Every header field {@link #applyRequest} can write, in a comparable form. */
+    private static List<Object> headerSignature(Quote quote) {
+        return Arrays.asList(
+                quote.getQuoteNumber(), quote.getQuoteType(), quote.getProjectNumber(),
+                quote.getCreateDate(), quote.getSubmitDate(), quote.getReceivedDate(),
+                quote.getCustId(), quote.getCustomerName(), quote.getContId(), quote.getContactName(),
+                quote.getCustomerRfq(), quote.getNcId(), quote.getNcNumber(),
+                quote.getAssyNumber(), quote.getPcbNumber(),
+                quote.getAssyQuoteStatus(), quote.getPcbQuoteNumber(), quote.getPcbQuoteStatus(),
+                quote.getQuoteArray(), norm(quote.getCommissionPercentage()),
+                quote.getInternalNote1(), quote.getInternalNote2(), quote.getNotesToCustomer(),
+                quote.getOtherNreCharges(), quote.isPncNotes(), quote.isLaborOnly(),
+                quote.isPartsScheduled(), quote.isFeedback(), quote.isItarc(), quote.isBerryc(),
+                quote.isSamsReview(), quote.getPcbaPlant(), quote.getPcbOrigin(), quote.getStatus()
+        );
+    }
+
+    /** One entry per line, so an added, removed or edited row all show up. */
+    private static List<List<Object>> quantitySignature(Quote quote) {
+        return quote.getQuantities().stream()
+                .map(row -> Arrays.asList(
+                        row.getQtyId(), row.getLt(), row.getLtPcb(), row.getLtPcba(), row.getQty(),
+                        norm(row.getPcbCost()), norm(row.getPartsCost()), norm(row.getLaborCost()),
+                        norm(row.getLaborDiscount()), norm(row.getPartMarkup()), norm(row.getTesting()),
+                        norm(row.getConfCoat()), row.getServiceName(), norm(row.getServiceCharge()),
+                        norm(row.getSubTotal()), norm(row.getTotalSalesPct()), norm(row.getPcbNre()),
+                        norm(row.getAssyNre()), norm(row.getStencil()), norm(row.getOtherNre()),
+                        norm(row.getTotal()), row.getComments(), row.isReceived()
+                ))
+                .toList();
+    }
+
+    /** 5 and 5.00 are the same amount, so compare without the trailing zeros. */
+    private static Object norm(BigDecimal value) {
+        return value == null ? null : value.stripTrailingZeros();
+    }
+
+    private void recordHistory(Quote quote, String action, Long userId, AppUser user, String changeSummary) {
         QuoteHistory entry = new QuoteHistory();
         entry.setQid(quote.getQid());
         entry.setAction(action);
+        entry.setChangeSummary(changeSummary);
         entry.setStatus(quote.getStatus());
         entry.setAssyQuoteStatus(quote.getAssyQuoteStatus());
         entry.setPcbQuoteStatus(quote.getPcbQuoteStatus());
@@ -235,10 +359,15 @@ public class QuoteService {
                 quote.getQid(),
                 quote.getQuoteNumber(),
                 quote.getQuoteType(),
+                quote.getProjectNumber(),
+                quote.getCreateDate(),
+                quote.getSubmitDate(),
+                quote.getReceivedDate(),
                 quote.getCustomerName(),
                 quote.getNcNumber(),
+                quote.getAssyNumber(),
+                quote.getPcbNumber(),
                 quote.getStatus(),
-                quote.getCreateDate(),
                 lock
         );
     }
@@ -266,7 +395,7 @@ public class QuoteService {
                 quote.getPcbQuoteStatus(),
                 quote.getPcbQuotePerson(),
                 quote.getQuoteArray(),
-                quote.getSalesPercentage(),
+                quote.getCommissionPercentage(),
                 quote.getInternalNote1(),
                 quote.getInternalNote2(),
                 quote.getNotesToCustomer(),
@@ -278,6 +407,7 @@ public class QuoteService {
                 quote.isFeedback(),
                 quote.isItarc(),
                 quote.isBerryc(),
+                quote.isSamsReview(),
                 quote.getPcbaPlant(),
                 quote.getPcbOrigin(),
                 quote.getStatus(),
@@ -324,6 +454,7 @@ public class QuoteService {
                 entry.getQhId(),
                 entry.getQid(),
                 entry.getAction(),
+                entry.getChangeSummary(),
                 entry.getStatus(),
                 entry.getAssyQuoteStatus(),
                 entry.getPcbQuoteStatus(),
@@ -337,8 +468,8 @@ public class QuoteService {
         return user == null ? "Unknown" : user.getDisplayName();
     }
 
-    private static boolean isReceived(String status) {
-        return status != null && status.trim().equalsIgnoreCase(RECEIVED_STATUS);
+    private static boolean isStatus(String status, String target) {
+        return status != null && status.trim().equalsIgnoreCase(target);
     }
 
     /** Roles allowed to change create_date. Add the rest here once they are agreed. */

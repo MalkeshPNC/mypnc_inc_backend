@@ -6,6 +6,7 @@ public record QuoteHistoryResponse(
         Long qhId,
         Long qid,
         String action,
+        String changeSummary,
         String status,
         String assyQuoteStatus,
         String pcbQuoteStatus,
