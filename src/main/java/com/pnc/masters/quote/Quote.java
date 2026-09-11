@@ -66,8 +66,14 @@ public class Quote {
     @Column(name = "assy_number", length = 120)
     private String assyNumber;
 
+    @Column(name = "pcba_revision", length = 40)
+    private String pcbaRevision;
+
     @Column(name = "pcb_number", length = 120)
     private String pcbNumber;
+
+    @Column(name = "pcb_revision", length = 40)
+    private String pcbRevision;
 
     @Column(name = "assy_quote_status", length = 80)
     private String assyQuoteStatus;
@@ -196,8 +202,12 @@ public class Quote {
     public void setNcNumber(String ncNumber) { this.ncNumber = ncNumber; }
     public String getAssyNumber() { return assyNumber; }
     public void setAssyNumber(String assyNumber) { this.assyNumber = assyNumber; }
+    public String getPcbaRevision() { return pcbaRevision; }
+    public void setPcbaRevision(String pcbaRevision) { this.pcbaRevision = pcbaRevision; }
     public String getPcbNumber() { return pcbNumber; }
     public void setPcbNumber(String pcbNumber) { this.pcbNumber = pcbNumber; }
+    public String getPcbRevision() { return pcbRevision; }
+    public void setPcbRevision(String pcbRevision) { this.pcbRevision = pcbRevision; }
     public String getAssyQuoteStatus() { return assyQuoteStatus; }
     public void setAssyQuoteStatus(String assyQuoteStatus) { this.assyQuoteStatus = assyQuoteStatus; }
     public String getAssyQuotePerson() { return assyQuotePerson; }

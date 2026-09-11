@@ -1,5 +1,7 @@
 package com.pnc.masters.quote.application;
 
+import com.pnc.masters.ncmaster.NcMaster;
+import com.pnc.masters.ncmaster.NcMasterRepository;
 import com.pnc.masters.quote.Quote;
 import com.pnc.masters.quote.QuoteHistory;
 import com.pnc.masters.quote.QuoteHistoryRepository;
@@ -60,6 +62,9 @@ class QuoteServiceTest {
     @Mock
     private AppUserRepository userRepository;
 
+    @Mock
+    private NcMasterRepository ncMasterRepository;
+
     private QuoteService quoteService;
 
     @BeforeEach
@@ -67,9 +72,11 @@ class QuoteServiceTest {
         QuoteLockProperties properties = new QuoteLockProperties();
         properties.setIdleTimeoutMs(300_000L);
         QuoteLockService lockService = new QuoteLockService(lockRepository, userRepository, properties);
-        quoteService = new QuoteService(quoteRepository, historyRepository, lockService, userRepository);
+        quoteService = new QuoteService(
+                quoteRepository, historyRepository, lockService, userRepository, ncMasterRepository);
         lenient().when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "Ada Lovelace")));
         lenient().when(userRepository.findById(8L)).thenReturn(Optional.of(user(8L, "Grace Hopper")));
+        lenient().when(ncMasterRepository.findById(any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -83,6 +90,57 @@ class QuoteServiceTest {
         assertThat(response.quoteNumber()).isEqualTo("2026NC-100");
         assertThat(response.assyQuotePerson()).isEqualTo("Ada Lovelace");
         assertThat(response.pcbQuotePerson()).isEqualTo("Ada Lovelace");
+    }
+
+    @Test
+    void createFillsBlankRevisionsFromTheNc() {
+        when(quoteRepository.existsByQuoteNumberIgnoreCase("2026NC-100")).thenReturn(false);
+        stubSaveAssigningId();
+        stubEmptyHistory();
+        when(ncMasterRepository.findById(5L)).thenReturn(Optional.of(ncMaster()));
+
+        QuoteResponse response = quoteService.create(request(" 2026nc-100 ", null), 7L);
+
+        assertThat(response.pcbaRevision()).isEqualTo("C");
+        assertThat(response.pcbRevision()).isEqualTo("B");
+    }
+
+    @Test
+    void findByIdReadsDifferingPartsAndRevisionsFromTheNcBeforeTheQuoteIsUpdated() {
+        Quote existing = existingQuote();
+        existing.setNcId(5L);
+        existing.setAssyNumber("Quote-ASSY");
+        existing.setPcbNumber("Quote-PCB");
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existing));
+        stubEmptyHistory();
+        when(ncMasterRepository.findById(5L)).thenReturn(Optional.of(ncMaster()));
+
+        QuoteResponse response = quoteService.findById(12L, 7L);
+
+        assertThat(response.assyNumber()).isEqualTo("NC-ASSY");
+        assertThat(response.pcbNumber()).isEqualTo("NC-PCB");
+        assertThat(response.pcbaRevision()).isEqualTo("C");
+        assertThat(response.pcbRevision()).isEqualTo("B");
+    }
+
+    @Test
+    void findByIdKeepsQuoteOwnedFieldsAfterTheFirstUpdate() {
+        Quote existing = existingQuote();
+        existing.setNcId(5L);
+        existing.setAssyNumber("Quote-ASSY");
+        existing.setPcbNumber("Quote-PCB");
+        existing.setPcbaRevision("Q1");
+        existing.setPcbRevision("Q2");
+        existing.setUpdatedAt(LocalDateTime.now());
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existing));
+        stubEmptyHistory();
+
+        QuoteResponse response = quoteService.findById(12L, 7L);
+
+        assertThat(response.assyNumber()).isEqualTo("Quote-ASSY");
+        assertThat(response.pcbNumber()).isEqualTo("Quote-PCB");
+        assertThat(response.pcbaRevision()).isEqualTo("Q1");
+        assertThat(response.pcbRevision()).isEqualTo("Q2");
     }
 
     @Test
@@ -108,7 +166,7 @@ class QuoteServiceTest {
     void createRejectsMissingCreateDate() {
         QuoteRequest withoutDate = new QuoteRequest(
                 "2026NC-100", null, null, null, null, null, null, null, null, null, null, null, null,
-                null,                 null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
                 false, false, false, false, false, false, false, null, null, null, null
         );
 
@@ -143,6 +201,22 @@ class QuoteServiceTest {
 
         assertThat(response.lock().heldByCurrentUser()).isTrue();
         assertThat(existing.getUpdatedByUserId()).isEqualTo(7L);
+    }
+
+    @Test
+    void updateStampsOnlyThePersonWhoseStatusChanged() {
+        Quote existing = existingQuote();
+        existing.setAssyQuoteStatus("In Progress");
+        existing.setPcbQuoteStatus("In Progress");
+        existing.setAssyQuotePerson("Old Assy");
+        existing.setPcbQuotePerson("Old Pcb");
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, requestWithStatuses("Working", "In Progress"), 7L);
+
+        assertThat(existing.getAssyQuotePerson()).isEqualTo("Ada Lovelace");
+        assertThat(existing.getPcbQuotePerson()).isEqualTo("Old Pcb");
     }
 
     @Test
@@ -529,6 +603,17 @@ class QuoteServiceTest {
         return quote;
     }
 
+    private static NcMaster ncMaster() {
+        NcMaster nc = new NcMaster();
+        nc.setNcId(5L);
+        nc.setNcNumber("NC-100");
+        nc.setPcbaPartNumber("NC-ASSY");
+        nc.setPcbPartNumber("NC-PCB");
+        nc.setPcbaRev("C");
+        nc.setPcbRev("B");
+        return nc;
+    }
+
     private static AppUser user(Long id, String displayName) {
         AppUser user = new AppUser();
         user.setUserId(id);
@@ -579,6 +664,22 @@ class QuoteServiceTest {
         return request(quoteNumber, quantities, "Open", null, null, "5.00");
     }
 
+    private static QuoteRequest requestWithStatuses(String assyQuoteStatus, String pcbQuoteStatus) {
+        QuoteRequest base = request("2026NC-100", List.of());
+        return new QuoteRequest(
+                base.quoteNumber(), base.quoteType(), base.projectNumber(), base.createDate(),
+                base.submitDate(), base.custId(), base.customerName(), base.contId(),
+                base.contactName(), base.customerRfq(), base.ncId(), base.ncNumber(),
+                base.assyNumber(), base.pcbaRevision(), base.pcbNumber(), base.pcbRevision(),
+                assyQuoteStatus, base.pcbQuoteNumber(),
+                pcbQuoteStatus, base.array(), base.commissionPercentage(), base.internalNote1(),
+                base.internalNote2(), base.notesToCustomer(), base.otherNreCharges(),
+                base.receivedDate(), base.pncNotes(), base.laborOnly(), base.partsScheduled(),
+                base.feedback(), base.itarc(), base.berryc(), base.samsReview(),
+                base.pcbaPlant(), base.pcbOrigin(), base.status(), base.quantities()
+        );
+    }
+
     private static QuoteRequest withStatus(String status, LocalDate receivedDate) {
         return request("2026NC-100", List.of(), status, null, receivedDate, "5.00");
     }
@@ -615,7 +716,9 @@ class QuoteServiceTest {
                 5L,
                 "NC-100",
                 "ASSY-1",
+                null,
                 "PCB-1",
+                null,
                 "In Progress",
                 "PQ-1",
                 "In Progress",

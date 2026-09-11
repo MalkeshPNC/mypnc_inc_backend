@@ -1,5 +1,7 @@
 package com.pnc.masters.quote.application;
 
+import com.pnc.masters.ncmaster.NcMaster;
+import com.pnc.masters.ncmaster.NcMasterRepository;
 import com.pnc.masters.quote.Quote;
 import com.pnc.masters.quote.QuoteHistory;
 import com.pnc.masters.quote.QuoteHistoryRepository;
@@ -30,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -54,15 +57,18 @@ public class QuoteService {
     private final QuoteHistoryRepository historyRepository;
     private final QuoteLockService lockService;
     private final AppUserRepository userRepository;
+    private final NcMasterRepository ncMasterRepository;
 
     public QuoteService(QuoteRepository quoteRepository,
                         QuoteHistoryRepository historyRepository,
                         QuoteLockService lockService,
-                        AppUserRepository userRepository) {
+                        AppUserRepository userRepository,
+                        NcMasterRepository ncMasterRepository) {
         this.quoteRepository = quoteRepository;
         this.historyRepository = historyRepository;
         this.lockService = lockService;
         this.userRepository = userRepository;
+        this.ncMasterRepository = ncMasterRepository;
     }
 
     @Transactional(readOnly = true)
@@ -89,7 +95,9 @@ public class QuoteService {
         }
         AppUser user = userRepository.findById(userId).orElse(null);
         Quote quote = new Quote();
-        applyRequest(quote, request, quoteNumber, user);
+        applyRequest(quote, request, quoteNumber);
+        seedBlankFieldsFromNc(quote);
+        stampQuotePersonsIfStatusChanged(quote, request, user, null, null);
         quote.setCreatedByUserId(userId);
         Quote saved = quoteRepository.save(quote);
         recordHistory(saved, QuoteHistory.ACTION_CREATED, userId, user, null);
@@ -104,10 +112,13 @@ public class QuoteService {
             throw new QuoteNumberExistsException(quoteNumber);
         }
         AppUser user = userRepository.findById(userId).orElse(null);
+        String previousAqStatus = quote.getAssyQuoteStatus();
+        String previousPqStatus = quote.getPcbQuoteStatus();
         LocalDate createDate = quote.getCreateDate();
         List<Object> headerBefore = headerSignature(quote);
         List<List<Object>> quantitiesBefore = quantitySignature(quote);
-        applyRequest(quote, request, quoteNumber, user);
+        applyRequest(quote, request, quoteNumber);
+        stampQuotePersonsIfStatusChanged(quote, request, user, previousAqStatus, previousPqStatus);
         // Create date is role-gated in the UI, so hold the line here rather than
         // trusting whatever the client posted.
         if (!mayEditCreateDate(user)) {
@@ -133,7 +144,7 @@ public class QuoteService {
         return quoteRepository.findByQidAndIsDeletedFalse(id).orElseThrow(() -> new QuoteNotFoundException(id));
     }
 
-    private void applyRequest(Quote quote, QuoteRequest request, String quoteNumber, AppUser user) {
+    private void applyRequest(Quote quote, QuoteRequest request, String quoteNumber) {
         quote.setQuoteNumber(quoteNumber);
         quote.setQuoteType(blankToNull(request.quoteType()));
         quote.setProjectNumber(blankToNull(request.projectNumber()));
@@ -151,7 +162,9 @@ public class QuoteService {
         quote.setNcId(request.ncId());
         quote.setNcNumber(blankToNull(request.ncNumber()));
         quote.setAssyNumber(blankToNull(request.assyNumber()));
+        quote.setPcbaRevision(blankToNull(request.pcbaRevision()));
         quote.setPcbNumber(blankToNull(request.pcbNumber()));
+        quote.setPcbRevision(blankToNull(request.pcbRevision()));
         quote.setAssyQuoteStatus(blankToNull(request.assyQuoteStatus()));
         quote.setPcbQuoteNumber(blankToNull(request.pcbQuoteNumber()));
         quote.setPcbQuoteStatus(blankToNull(request.pcbQuoteStatus()));
@@ -176,10 +189,28 @@ public class QuoteService {
         quote.setPcbaPlant(blankToNull(request.pcbaPlant()));
         quote.setPcbOrigin(blankToNull(request.pcbOrigin()));
         quote.setStatus(blankToNull(request.status()));
-        // The quote person columns are server owned: whoever saves owns the entry.
+    }
+
+    /**
+     * Each person column is stamped only when its matching status actually
+     * moved. Empty and null count as the same status so a first save of a
+     * blank field does not overwrite a stored name.
+     */
+    private void stampQuotePersonsIfStatusChanged(
+            Quote quote, QuoteRequest request, AppUser user, String previousAq, String previousPq) {
         String personName = displayName(user);
-        quote.setAssyQuotePerson(personName);
-        quote.setPcbQuotePerson(personName);
+        if (!sameQuoteStatus(previousAq, request.assyQuoteStatus())) {
+            quote.setAssyQuotePerson(personName);
+        }
+        if (!sameQuoteStatus(previousPq, request.pcbQuoteStatus())) {
+            quote.setPcbQuotePerson(personName);
+        }
+    }
+
+    private static boolean sameQuoteStatus(String stored, String requested) {
+        String left = stored == null ? "" : stored.trim();
+        String right = requested == null ? "" : requested.trim();
+        return left.equalsIgnoreCase(right);
     }
 
     /**
@@ -310,7 +341,7 @@ public class QuoteService {
                 quote.getCreateDate(), quote.getSubmitDate(), quote.getReceivedDate(),
                 quote.getCustId(), quote.getCustomerName(), quote.getContId(), quote.getContactName(),
                 quote.getCustomerRfq(), quote.getNcId(), quote.getNcNumber(),
-                quote.getAssyNumber(), quote.getPcbNumber(),
+                quote.getAssyNumber(), quote.getPcbaRevision(), quote.getPcbNumber(), quote.getPcbRevision(),
                 quote.getAssyQuoteStatus(), quote.getPcbQuoteNumber(), quote.getPcbQuoteStatus(),
                 quote.getQuoteArray(), norm(quote.getCommissionPercentage()),
                 quote.getInternalNote1(), quote.getInternalNote2(), quote.getNotesToCustomer(),
@@ -373,6 +404,7 @@ public class QuoteService {
     }
 
     private QuoteResponse toResponse(Quote quote, Long userId) {
+        NcDerived displayed = displayNcDerived(quote);
         return new QuoteResponse(
                 quote.getQid(),
                 quote.getQuoteNumber(),
@@ -387,8 +419,10 @@ public class QuoteService {
                 quote.getCustomerRfq(),
                 quote.getNcId(),
                 quote.getNcNumber(),
-                quote.getAssyNumber(),
-                quote.getPcbNumber(),
+                displayed.assyNumber(),
+                displayed.pcbaRevision(),
+                displayed.pcbNumber(),
+                displayed.pcbRevision(),
                 quote.getAssyQuoteStatus(),
                 quote.getAssyQuotePerson(),
                 quote.getPcbQuoteNumber(),
@@ -501,5 +535,76 @@ public class QuoteService {
             return null;
         }
         return value.trim();
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    /**
+     * First save copies any still-empty NC fields onto the quote so the edit
+     * screen has something to show before the user has updated it.
+     */
+    private void seedBlankFieldsFromNc(Quote quote) {
+        findNc(quote.getNcId()).ifPresent(nc -> {
+            if (isBlank(quote.getAssyNumber())) {
+                quote.setAssyNumber(blankToNull(nc.getPcbaPartNumber()));
+            }
+            if (isBlank(quote.getPcbNumber())) {
+                quote.setPcbNumber(blankToNull(nc.getPcbPartNumber()));
+            }
+            if (isBlank(quote.getPcbaRevision())) {
+                quote.setPcbaRevision(blankToNull(nc.getPcbaRev()));
+            }
+            if (isBlank(quote.getPcbRevision())) {
+                quote.setPcbRevision(blankToNull(nc.getPcbRev()));
+            }
+        });
+    }
+
+    /**
+     * Until the quote has been updated, PCB/PCBA rev always come from the NC.
+     * Assy# and PCB# do the same only when they no longer match the NC.
+     */
+    private NcDerived displayNcDerived(Quote quote) {
+        if (quote.getUpdatedAt() != null) {
+            return new NcDerived(
+                    quote.getAssyNumber(),
+                    quote.getPcbaRevision(),
+                    quote.getPcbNumber(),
+                    quote.getPcbRevision()
+            );
+        }
+        return findNc(quote.getNcId())
+                .map(nc -> new NcDerived(
+                        firstVisitPart(quote.getAssyNumber(), nc.getPcbaPartNumber()),
+                        preferNc(nc.getPcbaRev(), quote.getPcbaRevision()),
+                        firstVisitPart(quote.getPcbNumber(), nc.getPcbPartNumber()),
+                        preferNc(nc.getPcbRev(), quote.getPcbRevision())
+                ))
+                .orElseGet(() -> new NcDerived(
+                        quote.getAssyNumber(),
+                        quote.getPcbaRevision(),
+                        quote.getPcbNumber(),
+                        quote.getPcbRevision()
+                ));
+    }
+
+    private Optional<NcMaster> findNc(Long ncId) {
+        return ncId == null ? Optional.empty() : ncMasterRepository.findById(ncId);
+    }
+
+    private static String firstVisitPart(String stored, String ncValue) {
+        if (isBlank(stored) || sameQuoteStatus(stored, ncValue)) {
+            return blankToNull(stored) != null ? blankToNull(stored) : blankToNull(ncValue);
+        }
+        return blankToNull(ncValue);
+    }
+
+    private static String preferNc(String ncValue, String stored) {
+        return blankToNull(ncValue) != null ? blankToNull(ncValue) : blankToNull(stored);
+    }
+
+    private record NcDerived(String assyNumber, String pcbaRevision, String pcbNumber, String pcbRevision) {
     }
 }

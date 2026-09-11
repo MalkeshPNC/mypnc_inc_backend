@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * assyQuotePerson and pcbQuotePerson are deliberately absent: the server stamps
- * them with the saving user's display name.
+ * each one when its matching status changes.
  */
 public record QuoteRequest(
         @NotBlank(message = "quoteNumber is required") String quoteNumber,
@@ -27,7 +27,9 @@ public record QuoteRequest(
         Long ncId,
         String ncNumber,
         String assyNumber,
+        String pcbaRevision,
         String pcbNumber,
+        String pcbRevision,
         String assyQuoteStatus,
         String pcbQuoteNumber,
         String pcbQuoteStatus,
