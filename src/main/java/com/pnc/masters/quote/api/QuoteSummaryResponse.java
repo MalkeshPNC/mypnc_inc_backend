@@ -14,6 +14,8 @@ public record QuoteSummaryResponse(
         String ncNumber,
         String assyNumber,
         String pcbNumber,
+        String assyQuoteStatus,
+        String pcbQuoteStatus,
         String status,
         QuoteLockResponse lock
 ) {

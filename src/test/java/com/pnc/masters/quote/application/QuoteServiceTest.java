@@ -536,6 +536,20 @@ class QuoteServiceTest {
     }
 
     @Test
+    void findAllIncludesAqAndPqStatus() {
+        Quote existing = existingQuote();
+        existing.setAssyQuoteStatus("Working");
+        existing.setPcbQuoteStatus("Quoted");
+        when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existing));
+        when(lockRepository.findAllByQidIn(List.of(12L))).thenReturn(List.of());
+
+        var summaries = quoteService.findAll(7L);
+
+        assertThat(summaries.get(0).assyQuoteStatus()).isEqualTo("Working");
+        assertThat(summaries.get(0).pcbQuoteStatus()).isEqualTo("Quoted");
+    }
+
+    @Test
     void findAllDecoratesQuotesWithTheirCurrentLockHolder() {
         Quote existing = existingQuote();
         when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existing));

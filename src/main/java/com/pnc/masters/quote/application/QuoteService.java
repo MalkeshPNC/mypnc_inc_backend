@@ -398,6 +398,8 @@ public class QuoteService {
                 quote.getNcNumber(),
                 quote.getAssyNumber(),
                 quote.getPcbNumber(),
+                quote.getAssyQuoteStatus(),
+                quote.getPcbQuoteStatus(),
                 quote.getStatus(),
                 lock
         );
