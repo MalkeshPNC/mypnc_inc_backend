@@ -1,5 +1,6 @@
 package com.pnc.masters.quote.application;
 
+import com.pnc.masters.contact.ContactRepository;
 import com.pnc.masters.ncmaster.NcMaster;
 import com.pnc.masters.ncmaster.NcMasterRepository;
 import com.pnc.masters.quote.Quote;
@@ -65,6 +66,9 @@ class QuoteServiceTest {
     @Mock
     private NcMasterRepository ncMasterRepository;
 
+    @Mock
+    private ContactRepository contactRepository;
+
     private QuoteService quoteService;
 
     @BeforeEach
@@ -73,10 +77,11 @@ class QuoteServiceTest {
         properties.setIdleTimeoutMs(300_000L);
         QuoteLockService lockService = new QuoteLockService(lockRepository, userRepository, properties);
         quoteService = new QuoteService(
-                quoteRepository, historyRepository, lockService, userRepository, ncMasterRepository);
+                quoteRepository, historyRepository, lockService, userRepository, ncMasterRepository, contactRepository);
         lenient().when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "Ada Lovelace")));
         lenient().when(userRepository.findById(8L)).thenReturn(Optional.of(user(8L, "Grace Hopper")));
         lenient().when(ncMasterRepository.findById(any())).thenReturn(Optional.empty());
+        lenient().when(contactRepository.findById(any())).thenReturn(Optional.empty());
     }
 
     @Test

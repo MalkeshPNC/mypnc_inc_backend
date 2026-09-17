@@ -6,6 +6,7 @@ public record ConfigurationResponse(
         String configKey,
         String configValue,
         String description,
+        boolean useEditor,
         LocalDateTime updatedAt
 ) {
 }

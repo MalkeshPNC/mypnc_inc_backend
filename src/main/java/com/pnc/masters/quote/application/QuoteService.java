@@ -1,5 +1,7 @@
 package com.pnc.masters.quote.application;
 
+import com.pnc.masters.contact.Contact;
+import com.pnc.masters.contact.ContactRepository;
 import com.pnc.masters.ncmaster.NcMaster;
 import com.pnc.masters.ncmaster.NcMasterRepository;
 import com.pnc.masters.quote.Quote;
@@ -58,17 +60,20 @@ public class QuoteService {
     private final QuoteLockService lockService;
     private final AppUserRepository userRepository;
     private final NcMasterRepository ncMasterRepository;
+    private final ContactRepository contactRepository;
 
     public QuoteService(QuoteRepository quoteRepository,
                         QuoteHistoryRepository historyRepository,
                         QuoteLockService lockService,
                         AppUserRepository userRepository,
-                        NcMasterRepository ncMasterRepository) {
+                        NcMasterRepository ncMasterRepository,
+                        ContactRepository contactRepository) {
         this.quoteRepository = quoteRepository;
         this.historyRepository = historyRepository;
         this.lockService = lockService;
         this.userRepository = userRepository;
         this.ncMasterRepository = ncMasterRepository;
+        this.contactRepository = contactRepository;
     }
 
     @Transactional(readOnly = true)
@@ -157,7 +162,7 @@ public class QuoteService {
         quote.setCustId(request.custId());
         quote.setCustomerName(blankToNull(request.customerName()));
         quote.setContId(request.contId());
-        quote.setContactName(blankToNull(request.contactName()));
+        quote.setContactName(resolveContactName(request.contId(), request.contactName()));
         quote.setCustomerRfq(blankToNull(request.customerRfq()));
         quote.setNcId(request.ncId());
         quote.setNcNumber(blankToNull(request.ncNumber()));
@@ -417,7 +422,7 @@ public class QuoteService {
                 quote.getCustId(),
                 quote.getCustomerName(),
                 quote.getContId(),
-                quote.getContactName(),
+                displayedContactName(quote),
                 quote.getCustomerRfq(),
                 quote.getNcId(),
                 quote.getNcNumber(),
@@ -530,6 +535,42 @@ public class QuoteService {
 
     private static boolean isTrue(Boolean value) {
         return value != null && value;
+    }
+
+    private String displayedContactName(Quote quote) {
+        return resolveContactName(quote.getContId(), quote.getContactName());
+    }
+
+    private String resolveContactName(Long contId, String storedName) {
+        String name = blankToNull(storedName);
+        if (name != null || contId == null) {
+            return name;
+        }
+        return contactRepository.findById(contId).map(QuoteService::contactLabel).orElse(null);
+    }
+
+    private static String contactLabel(Contact contact) {
+        String name = joinName(contact.getFirstName(), contact.getLastName());
+        if (name != null) {
+            return name;
+        }
+        String person = blankToNull(contact.getContactPerson());
+        if (person != null) {
+            return person;
+        }
+        String email = blankToNull(contact.getEmail());
+        if (email != null) {
+            return email;
+        }
+        String phone = blankToNull(contact.getPhone());
+        return phone != null ? phone : "Contact #" + contact.getContId();
+    }
+
+    private static String joinName(String firstName, String lastName) {
+        String first = firstName == null ? "" : firstName.trim();
+        String last = lastName == null ? "" : lastName.trim();
+        String joined = (first + " " + last).trim();
+        return joined.isEmpty() ? null : joined;
     }
 
     private static String blankToNull(String value) {

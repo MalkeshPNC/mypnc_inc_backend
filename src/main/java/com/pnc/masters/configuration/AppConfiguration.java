@@ -15,11 +15,14 @@ public class AppConfiguration {
     @Column(name = "config_key", length = 100)
     private String configKey;
 
-    @Column(name = "config_value", nullable = false, length = 500)
+    @Column(name = "config_value", nullable = false, columnDefinition = "TEXT")
     private String configValue;
 
     @Column(length = 255)
     private String description;
+
+    @Column(name = "use_editor", nullable = false)
+    private boolean useEditor;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
@@ -30,6 +33,8 @@ public class AppConfiguration {
     public void setConfigValue(String configValue) { this.configValue = configValue; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+    public boolean isUseEditor() { return useEditor; }
+    public void setUseEditor(boolean useEditor) { this.useEditor = useEditor; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

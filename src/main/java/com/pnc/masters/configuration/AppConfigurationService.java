@@ -33,13 +33,13 @@ public class AppConfigurationService {
         }
         AppConfiguration configuration = new AppConfiguration();
         configuration.setConfigKey(key);
-        applyValue(configuration, request.configValue(), request.description());
+        applyValue(configuration, request.configValue(), request.description(), request.useEditor());
         return toResponse(repository.save(configuration));
     }
 
     public ConfigurationResponse update(String key, ConfigurationUpdateRequest request) {
         AppConfiguration configuration = getConfiguration(key);
-        applyValue(configuration, request.configValue(), request.description());
+        applyValue(configuration, request.configValue(), request.description(), request.useEditor());
         return toResponse(repository.save(configuration));
     }
 
@@ -52,9 +52,10 @@ public class AppConfigurationService {
                 .orElseThrow(() -> new ConfigurationNotFoundException(key));
     }
 
-    private void applyValue(AppConfiguration configuration, String value, String description) {
+    private void applyValue(AppConfiguration configuration, String value, String description, boolean useEditor) {
         configuration.setConfigValue(value.trim());
         configuration.setDescription(blankToNull(description));
+        configuration.setUseEditor(useEditor);
         configuration.setUpdatedAt(LocalDateTime.now());
     }
 
@@ -63,6 +64,7 @@ public class AppConfigurationService {
                 configuration.getConfigKey(),
                 configuration.getConfigValue(),
                 configuration.getDescription(),
+                configuration.isUseEditor(),
                 configuration.getUpdatedAt());
     }
 

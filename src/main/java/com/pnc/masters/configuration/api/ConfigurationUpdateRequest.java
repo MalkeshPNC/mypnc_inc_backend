@@ -5,9 +5,10 @@ import jakarta.validation.constraints.Size;
 
 public record ConfigurationUpdateRequest(
         @NotBlank(message = "configValue is required")
-        @Size(max = 500, message = "configValue must be at most 500 characters")
+        @Size(max = 8000, message = "configValue must be at most 8000 characters")
         String configValue,
         @Size(max = 255, message = "description must be at most 255 characters")
-        String description
+        String description,
+        boolean useEditor
 ) {
 }

@@ -36,11 +36,12 @@ class AppConfigurationServiceTest {
         when(repository.save(any(AppConfiguration.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ConfigurationResponse response = service.create(new ConfigurationCreateRequest(
-                "salesperson.defaultCommission", " 12.5 ", "  Default commission  "));
+                "salesperson.defaultCommission", " 12.5 ", "  Default commission  ", false));
 
         assertThat(response.configKey()).isEqualTo("salesperson.defaultCommission");
         assertThat(response.configValue()).isEqualTo("12.5");
         assertThat(response.description()).isEqualTo("Default commission");
+        assertThat(response.useEditor()).isFalse();
         ArgumentCaptor<AppConfiguration> captor = ArgumentCaptor.forClass(AppConfiguration.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getUpdatedAt()).isNotNull();
@@ -51,7 +52,7 @@ class AppConfigurationServiceTest {
         when(repository.existsById("salesperson.defaultCommission")).thenReturn(true);
 
         assertThatThrownBy(() -> service.create(new ConfigurationCreateRequest(
-                "salesperson.defaultCommission", "10", null)))
+                "salesperson.defaultCommission", "10", null, false)))
                 .isInstanceOf(ConfigurationKeyExistsException.class);
     }
 
@@ -66,10 +67,11 @@ class AppConfigurationServiceTest {
 
         ConfigurationResponse response = service.update(
                 "salesperson.defaultCommission",
-                new ConfigurationUpdateRequest("15", "Updated"));
+                new ConfigurationUpdateRequest("15", "Updated", true));
 
         assertThat(response.configValue()).isEqualTo("15");
         assertThat(response.description()).isEqualTo("Updated");
+        assertThat(response.useEditor()).isTrue();
     }
 
     @Test

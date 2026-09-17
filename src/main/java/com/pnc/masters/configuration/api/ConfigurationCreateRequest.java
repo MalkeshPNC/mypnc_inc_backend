@@ -10,9 +10,10 @@ public record ConfigurationCreateRequest(
         @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9._-]*$", message = "configKey must start with a letter and contain only letters, numbers, dots, hyphens, or underscores")
         String configKey,
         @NotBlank(message = "configValue is required")
-        @Size(max = 500, message = "configValue must be at most 500 characters")
+        @Size(max = 8000, message = "configValue must be at most 8000 characters")
         String configValue,
         @Size(max = 255, message = "description must be at most 255 characters")
-        String description
+        String description,
+        boolean useEditor
 ) {
 }
