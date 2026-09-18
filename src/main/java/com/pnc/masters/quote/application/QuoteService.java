@@ -9,6 +9,8 @@ import com.pnc.masters.quote.QuoteHistory;
 import com.pnc.masters.quote.QuoteHistoryRepository;
 import com.pnc.masters.quote.QuoteQuantity;
 import com.pnc.masters.quote.QuoteRepository;
+import com.pnc.masters.quote.api.QuoteCopyNumberResponse;
+import com.pnc.masters.quote.api.QuoteFamilyResponse;
 import com.pnc.masters.quote.api.QuoteHistoryResponse;
 import com.pnc.masters.quote.api.QuoteLockResponse;
 import com.pnc.masters.quote.api.QuoteNotFoundException;
@@ -30,12 +32,16 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Transactional
@@ -81,17 +87,62 @@ public class QuoteService {
         List<Quote> quotes = quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc();
         Map<Long, QuoteLockResponse> locks =
                 lockService.findAll(quotes.stream().map(Quote::getQid).toList(), userId);
-        return quotes.stream().map(quote -> toSummary(quote, locks.get(quote.getQid()))).toList();
+        Map<String, Integer> familyCounts = familyCounts(quotes);
+        return quotes.stream()
+                .map(quote -> toSummary(quote, locks.get(quote.getQid()), familySize(quote, familyCounts)))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public QuoteResponse findById(Long id, Long userId) {
-        return toResponse(getQuote(id), userId);
+        return toResponse(getQuote(id), userId, true);
     }
 
     /**
-     * Creates the header only. Quantity lines are added later from the edit
-     * screen, which is the only place they exist.
+     * All non-deleted quotes in the copy family, original first then numeric suffix.
+     * History and lock are omitted; compare does not need them.
+     */
+    @Transactional(readOnly = true)
+    public QuoteFamilyResponse findFamily(Long id, Long userId) {
+        Quote source = getQuote(id);
+        String family = quoteFamily(source.getQuoteNumber());
+        List<Quote> members = new ArrayList<>(quoteRepository.findFamilyQuotes(family));
+        members.sort(Comparator.comparingInt(quote -> familySortKey(quote.getQuoteNumber(), family)));
+        int size = members.size();
+        List<QuoteResponse> quotes = members.stream()
+                .map(quote -> toResponse(quote, userId, false, size))
+                .toList();
+        return new QuoteFamilyResponse(family, quotes);
+    }
+
+    /**
+     * Next Quote# in the copy family. The unsuffixed original is version 1, so
+     * the first copy is {@code family.2}, then {@code family.(maxSuffix + 1)}.
+     * Gaps are not filled.
+     */
+    @Transactional(readOnly = true)
+    public QuoteCopyNumberResponse nextCopyNumber(Long id) {
+        Quote quote = getQuote(id);
+        String family = quoteFamily(quote.getQuoteNumber());
+        List<String> numbers = quoteRepository.findFamilyQuoteNumbers(family);
+        Pattern suffix = Pattern.compile("(?i)^" + Pattern.quote(family) + "\\.(\\d+)$");
+        // The bare family number is revision 1; copies start at .2.
+        int maxSuffix = 1;
+        for (String number : numbers) {
+            if (number == null) {
+                continue;
+            }
+            Matcher matcher = suffix.matcher(number.trim());
+            if (matcher.matches()) {
+                maxSuffix = Math.max(maxSuffix, Integer.parseInt(matcher.group(1)));
+            }
+        }
+        return new QuoteCopyNumberResponse(family + "." + (maxSuffix + 1));
+    }
+
+    /**
+     * Creates the header, then persists quantity rows when the request includes
+     * them (copy). qtyId 0 / null is treated as a new line.
      */
     public QuoteResponse create(QuoteRequest request, Long userId) {
         String quoteNumber = requireQuoteNumber(request);
@@ -105,8 +156,13 @@ public class QuoteService {
         stampQuotePersonsIfStatusChanged(quote, request, user, null, null);
         quote.setCreatedByUserId(userId);
         Quote saved = quoteRepository.save(quote);
+        List<QuoteQuantityRequest> rows = request.quantities();
+        if (rows != null && !rows.isEmpty()) {
+            applyQuantities(saved, rows);
+            saved = quoteRepository.save(saved);
+        }
         recordHistory(saved, QuoteHistory.ACTION_CREATED, userId, user, null);
-        return toResponse(saved, userId);
+        return toResponse(saved, userId, true);
     }
 
     public QuoteResponse update(Long id, QuoteRequest request, Long userId) {
@@ -135,7 +191,7 @@ public class QuoteService {
         Quote saved = quoteRepository.save(quote);
         recordHistory(saved, QuoteHistory.ACTION_UPDATED, userId, user,
                 describeChanges(headerBefore, quantitiesBefore, saved));
-        return toResponse(saved, userId);
+        return toResponse(saved, userId, true);
     }
 
     public void delete(Long id) {
@@ -147,6 +203,66 @@ public class QuoteService {
 
     private Quote getQuote(Long id) {
         return quoteRepository.findByQidAndIsDeletedFalse(id).orElseThrow(() -> new QuoteNotFoundException(id));
+    }
+
+    /**
+     * Family is the quote number with a trailing {@code .digits} stripped, so
+     * {@code 2026NC-100} and {@code 2026NC-100.1} share {@code 2026NC-100}.
+     * Copying {@code .1} still uses that family, not {@code .1.1}.
+     */
+    static String quoteFamily(String quoteNumber) {
+        if (quoteNumber == null || quoteNumber.isBlank()) {
+            return "";
+        }
+        return quoteNumber.trim().replaceFirst("\\.\\d+$", "");
+    }
+
+    private static Map<String, Integer> familyCounts(List<Quote> quotes) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (Quote quote : quotes) {
+            String family = quoteFamily(quote.getQuoteNumber());
+            if (!family.isBlank()) {
+                counts.merge(family.toLowerCase(Locale.ROOT), 1, Integer::sum);
+            }
+        }
+        return counts;
+    }
+
+    private static int familySize(Quote quote, Map<String, Integer> familyCounts) {
+        String family = quoteFamily(quote.getQuoteNumber());
+        if (family.isBlank()) {
+            return 1;
+        }
+        return familyCounts.getOrDefault(family.toLowerCase(Locale.ROOT), 1);
+    }
+
+    private int familySize(Quote quote) {
+        String family = quoteFamily(quote.getQuoteNumber());
+        if (family.isBlank()) {
+            return 1;
+        }
+        return Math.max(1, quoteRepository.findFamilyQuoteNumbers(family).size());
+    }
+
+    /**
+     * Original (unsuffixed) first, then {@code family.2}, {@code family.3}, …
+     */
+    static int familySortKey(String quoteNumber, String family) {
+        if (quoteNumber == null || quoteNumber.isBlank()) {
+            return Integer.MAX_VALUE;
+        }
+        String trimmed = quoteNumber.trim();
+        if (family != null && trimmed.equalsIgnoreCase(family)) {
+            return 0;
+        }
+        if (family == null || family.isBlank()) {
+            return Integer.MAX_VALUE;
+        }
+        Matcher matcher = Pattern.compile("(?i)^" + Pattern.quote(family) + "\\.(\\d+)$").matcher(trimmed);
+        if (matcher.matches()) {
+            return Integer.parseInt(matcher.group(1));
+        }
+        return Integer.MAX_VALUE;
     }
 
     private void applyRequest(Quote quote, QuoteRequest request, String quoteNumber) {
@@ -390,7 +506,7 @@ public class QuoteService {
         historyRepository.save(entry);
     }
 
-    private QuoteSummaryResponse toSummary(Quote quote, QuoteLockResponse lock) {
+    private QuoteSummaryResponse toSummary(Quote quote, QuoteLockResponse lock, int familySize) {
         return new QuoteSummaryResponse(
                 quote.getQid(),
                 quote.getQuoteNumber(),
@@ -406,11 +522,16 @@ public class QuoteService {
                 quote.getAssyQuoteStatus(),
                 quote.getPcbQuoteStatus(),
                 quote.getStatus(),
-                lock
+                lock,
+                familySize
         );
     }
 
-    private QuoteResponse toResponse(Quote quote, Long userId) {
+    private QuoteResponse toResponse(Quote quote, Long userId, boolean includeAudit) {
+        return toResponse(quote, userId, includeAudit, familySize(quote));
+    }
+
+    private QuoteResponse toResponse(Quote quote, Long userId, boolean includeAudit, int familySize) {
         NcDerived displayed = displayNcDerived(quote);
         return new QuoteResponse(
                 quote.getQid(),
@@ -455,9 +576,12 @@ public class QuoteService {
                 quote.getCreatedAt(),
                 quote.getUpdatedAt(),
                 quote.getQuantities().stream().map(QuoteService::toQuantityResponse).toList(),
-                historyRepository.findAllByQidOrderByChangedAtDesc(quote.getQid()).stream()
-                        .map(QuoteService::toHistoryResponse).toList(),
-                lockService.find(quote.getQid(), userId)
+                includeAudit
+                        ? historyRepository.findAllByQidOrderByChangedAtDesc(quote.getQid()).stream()
+                                .map(QuoteService::toHistoryResponse).toList()
+                        : List.of(),
+                includeAudit ? lockService.find(quote.getQid(), userId) : null,
+                familySize
         );
     }
 

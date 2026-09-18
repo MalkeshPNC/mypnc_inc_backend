@@ -49,6 +49,7 @@ public record QuoteResponse(
         LocalDateTime updatedAt,
         List<QuoteQuantityResponse> quantities,
         List<QuoteHistoryResponse> history,
-        QuoteLockResponse lock
+        QuoteLockResponse lock,
+        int familySize
 ) {
 }

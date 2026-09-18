@@ -35,6 +35,16 @@ public class QuoteController {
         return quoteService.findAll(userId(authentication));
     }
 
+    @GetMapping("/{id}/next-copy-number")
+    public QuoteCopyNumberResponse nextCopyNumber(@PathVariable Long id) {
+        return quoteService.nextCopyNumber(id);
+    }
+
+    @GetMapping("/{id}/family")
+    public QuoteFamilyResponse findFamily(@PathVariable Long id, Authentication authentication) {
+        return quoteService.findFamily(id, userId(authentication));
+    }
+
     @GetMapping("/{id}")
     public QuoteResponse findById(@PathVariable Long id, Authentication authentication) {
         return quoteService.findById(id, userId(authentication));

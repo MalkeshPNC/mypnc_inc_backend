@@ -12,6 +12,7 @@ import com.pnc.masters.quote.QuoteLockRepository;
 import com.pnc.masters.quote.QuoteQuantity;
 import com.pnc.masters.quote.QuoteRepository;
 import com.pnc.masters.quote.api.QuoteLockedException;
+import com.pnc.masters.quote.api.QuoteNotFoundException;
 import com.pnc.masters.quote.api.QuoteNumberExistsException;
 import com.pnc.masters.quote.api.QuoteQuantityRequest;
 import com.pnc.masters.quote.api.QuoteRequest;
@@ -82,6 +83,7 @@ class QuoteServiceTest {
         lenient().when(userRepository.findById(8L)).thenReturn(Optional.of(user(8L, "Grace Hopper")));
         lenient().when(ncMasterRepository.findById(any())).thenReturn(Optional.empty());
         lenient().when(contactRepository.findById(any())).thenReturn(Optional.empty());
+        lenient().when(quoteRepository.findFamilyQuoteNumbers(any())).thenReturn(List.of());
     }
 
     @Test
@@ -146,6 +148,134 @@ class QuoteServiceTest {
         assertThat(response.pcbNumber()).isEqualTo("Quote-PCB");
         assertThat(response.pcbaRevision()).isEqualTo("Q1");
         assertThat(response.pcbRevision()).isEqualTo("Q2");
+    }
+
+    @Test
+    void nextCopyNumberUsesFamilyDotTwoWhenNoSuffixExists() {
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existingQuote()));
+        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100")).thenReturn(List.of("2026NC-100"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.2");
+    }
+
+    @Test
+    void nextCopyNumberIncrementsPastAnExistingDotTwo() {
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existingQuote()));
+        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100"))
+                .thenReturn(List.of("2026NC-100", "2026NC-100.2"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.3");
+    }
+
+    @Test
+    void nextCopyNumberUsesTheFamilyMaxWhenCopyingARevision() {
+        Quote source = existingQuote();
+        source.setQuoteNumber("2026NC-100.2");
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(source));
+        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100"))
+                .thenReturn(List.of("2026NC-100", "2026NC-100.2", "2026NC-100.3"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.4");
+    }
+
+    @Test
+    void nextCopyNumberSkipsGapsInTheSuffix() {
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existingQuote()));
+        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100"))
+                .thenReturn(List.of("2026NC-100", "2026NC-100.2", "2026NC-100.4"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.5");
+    }
+
+    @Test
+    void nextCopyNumberRejectsAMissingQuote() {
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> quoteService.nextCopyNumber(12L))
+                .isInstanceOf(QuoteNotFoundException.class);
+    }
+
+    @Test
+    void findFamilyOrdersOriginalThenNumericSuffixes() {
+        Quote original = existingQuote();
+        Quote second = quoteAt(13L, "2026NC-100.2");
+        Quote third = quoteAt(14L, "2026NC-100.3");
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(original));
+        when(quoteRepository.findFamilyQuotes("2026NC-100")).thenReturn(List.of(third, original, second));
+
+        var family = quoteService.findFamily(12L, 7L);
+
+        assertThat(family.family()).isEqualTo("2026NC-100");
+        assertThat(family.quotes()).extracting(QuoteResponse::quoteNumber)
+                .containsExactly("2026NC-100", "2026NC-100.2", "2026NC-100.3");
+        assertThat(family.quotes()).allMatch(quote -> quote.history().isEmpty());
+        assertThat(family.quotes()).allMatch(quote -> quote.familySize() == 3);
+    }
+
+    @Test
+    void findFamilyFromARevisionStillReturnsTheWholeFamily() {
+        Quote original = existingQuote();
+        Quote second = quoteAt(13L, "2026NC-100.2");
+        Quote third = quoteAt(14L, "2026NC-100.3");
+        when(quoteRepository.findByQidAndIsDeletedFalse(13L)).thenReturn(Optional.of(second));
+        when(quoteRepository.findFamilyQuotes("2026NC-100")).thenReturn(List.of(original, second, third));
+
+        var family = quoteService.findFamily(13L, 7L);
+
+        assertThat(family.quotes()).extracting(QuoteResponse::quoteNumber)
+                .containsExactly("2026NC-100", "2026NC-100.2", "2026NC-100.3");
+    }
+
+    @Test
+    void findFamilyOmitsQuotesTheRepositoryDoesNotReturn() {
+        Quote original = existingQuote();
+        Quote second = quoteAt(13L, "2026NC-100.2");
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(original));
+        when(quoteRepository.findFamilyQuotes("2026NC-100")).thenReturn(List.of(original, second));
+
+        var family = quoteService.findFamily(12L, 7L);
+
+        assertThat(family.quotes()).extracting(QuoteResponse::quoteNumber)
+                .containsExactly("2026NC-100", "2026NC-100.2");
+        assertThat(family.quotes()).extracting(QuoteResponse::qid).doesNotContain(99L);
+    }
+
+    @Test
+    void findFamilyRejectsAMissingQuote() {
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> quoteService.findFamily(12L, 7L))
+                .isInstanceOf(QuoteNotFoundException.class);
+    }
+
+    @Test
+    void findAllSetsFamilySizeFromSharedQuoteNumbers() {
+        Quote original = existingQuote();
+        Quote copy = quoteAt(13L, "2026NC-100.2");
+        Quote other = quoteAt(20L, "2026NC-200");
+        when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc())
+                .thenReturn(List.of(original, copy, other));
+        when(lockRepository.findAllByQidIn(List.of(12L, 13L, 20L))).thenReturn(List.of());
+
+        var summaries = quoteService.findAll(7L);
+
+        assertThat(summaries).extracting(summary -> summary.familySize())
+                .containsExactly(2, 2, 1);
+    }
+
+    @Test
+    void createPersistsQuantityRowsFromTheRequest() {
+        when(quoteRepository.existsByQuoteNumberIgnoreCase("2026NC-100")).thenReturn(false);
+        stubSaveAssigningId();
+        stubEmptyHistory();
+
+        QuoteResponse response = quoteService.create(
+                request("2026NC-100", List.of(quantity(5L, 10), quantity(0L, 50))), 7L);
+
+        assertThat(response.quantities()).hasSize(2);
+        assertThat(response.quantities().get(0).qty()).isEqualTo(10);
+        assertThat(response.quantities().get(1).qty()).isEqualTo(50);
+        assertThat(response.quantities()).allMatch(row -> row.qtyId() == null);
     }
 
     @Test
@@ -615,9 +745,13 @@ class QuoteServiceTest {
     }
 
     private static Quote existingQuote() {
+        return quoteAt(12L, "2026NC-100");
+    }
+
+    private static Quote quoteAt(Long qid, String quoteNumber) {
         Quote quote = new Quote();
-        quote.setQid(12L);
-        quote.setQuoteNumber("2026NC-100");
+        quote.setQid(qid);
+        quote.setQuoteNumber(quoteNumber);
         quote.setCreateDate(LocalDate.of(2026, 1, 5));
         return quote;
     }

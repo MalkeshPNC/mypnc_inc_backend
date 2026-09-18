@@ -17,6 +17,7 @@ public record QuoteSummaryResponse(
         String assyQuoteStatus,
         String pcbQuoteStatus,
         String status,
-        QuoteLockResponse lock
+        QuoteLockResponse lock,
+        int familySize
 ) {
 }
