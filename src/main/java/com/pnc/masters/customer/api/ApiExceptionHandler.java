@@ -2,6 +2,7 @@ package com.pnc.masters.customer.api;
 
 import com.pnc.masters.configuration.api.ConfigurationKeyExistsException;
 import com.pnc.masters.configuration.api.ConfigurationNotFoundException;
+import com.pnc.masters.configuration.api.FaiConfigValidationException;
 import com.pnc.masters.configuration.api.SubConfigurationEntryNotFoundException;
 import com.pnc.masters.configuration.api.SubConfigurationTypeExistsException;
 import com.pnc.masters.configuration.api.SubConfigurationTypeNotFoundException;
@@ -131,6 +132,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(SubConfigurationValidationException.class)
     public ResponseEntity<Map<String, Object>> handleSubConfigValidation(SubConfigurationValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(FaiConfigValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleFaiConfigValidation(FaiConfigValidationException exception) {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
     }
 

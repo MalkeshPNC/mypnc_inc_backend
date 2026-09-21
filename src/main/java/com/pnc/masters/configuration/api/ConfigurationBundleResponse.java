@@ -4,6 +4,7 @@ import java.util.List;
 
 public record ConfigurationBundleResponse(
         List<ConfigurationResponse> settings,
-        List<SubConfigurationTypeResponse> subConfigurations
+        List<SubConfigurationTypeResponse> subConfigurations,
+        QuoteFaiConfigResponse fai
 ) {
 }

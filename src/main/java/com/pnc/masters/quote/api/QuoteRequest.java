@@ -51,6 +51,14 @@ public record QuoteRequest(
         String pcbaPlant,
         String pcbOrigin,
         String status,
+        Boolean faiReqPnc,
+        BigDecimal faiPcbWo,
+        BigDecimal faiPcbaWo,
+        String faiHeadingPnc,
+        Boolean faiReqAs9102,
+        BigDecimal faiPcbWith,
+        BigDecimal faiPcbaWith,
+        String faiHeadingAs9102,
         @Valid List<QuoteQuantityRequest> quantities
 ) {
 }

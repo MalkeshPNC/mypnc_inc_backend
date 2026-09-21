@@ -310,6 +310,33 @@ public class QuoteService {
         quote.setPcbaPlant(blankToNull(request.pcbaPlant()));
         quote.setPcbOrigin(blankToNull(request.pcbOrigin()));
         quote.setStatus(blankToNull(request.status()));
+        applyFai(quote, request);
+    }
+
+    private static void applyFai(Quote quote, QuoteRequest request) {
+        boolean reqPnc = isTrue(request.faiReqPnc());
+        boolean reqAs9102 = isTrue(request.faiReqAs9102());
+        quote.setFaiReqPnc(reqPnc);
+        quote.setFaiPcbWo(optionalFaiPrice(request.faiPcbWo(), reqPnc, "PNC FAI PCB"));
+        quote.setFaiPcbaWo(optionalFaiPrice(request.faiPcbaWo(), reqPnc, "PNC FAI PCBA"));
+        quote.setFaiHeadingPnc(blankToNull(request.faiHeadingPnc()));
+        quote.setFaiReqAs9102(reqAs9102);
+        quote.setFaiPcbWith(optionalFaiPrice(request.faiPcbWith(), reqAs9102, "AS9102 FAI PCB"));
+        quote.setFaiPcbaWith(optionalFaiPrice(request.faiPcbaWith(), reqAs9102, "AS9102 FAI PCBA"));
+        quote.setFaiHeadingAs9102(blankToNull(request.faiHeadingAs9102()));
+    }
+
+    private static BigDecimal optionalFaiPrice(BigDecimal value, boolean required, String field) {
+        if (required && value == null) {
+            throw new QuoteValidationException(field + " is required");
+        }
+        if (value == null) {
+            return null;
+        }
+        if (value.compareTo(BigDecimal.ZERO) < 0) {
+            throw new QuoteValidationException(field + " cannot be negative");
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
@@ -468,7 +495,10 @@ public class QuoteService {
                 quote.getInternalNote1(), quote.getInternalNote2(), quote.getNotesToCustomer(),
                 quote.getOtherNreCharges(), quote.isPncNotes(), quote.isLaborOnly(),
                 quote.isPartsScheduled(), quote.isFeedback(), quote.isItarc(), quote.isBerryc(),
-                quote.isSamsReview(), quote.getPcbaPlant(), quote.getPcbOrigin(), quote.getStatus()
+                quote.isSamsReview(), quote.getPcbaPlant(), quote.getPcbOrigin(), quote.getStatus(),
+                quote.isFaiReqPnc(), norm(quote.getFaiPcbWo()), norm(quote.getFaiPcbaWo()),
+                quote.getFaiHeadingPnc(), quote.isFaiReqAs9102(),
+                norm(quote.getFaiPcbWith()), norm(quote.getFaiPcbaWith()), quote.getFaiHeadingAs9102()
         );
     }
 
@@ -522,6 +552,7 @@ public class QuoteService {
                 quote.getAssyQuoteStatus(),
                 quote.getPcbQuoteStatus(),
                 quote.getStatus(),
+                quote.isSamsReview(),
                 lock,
                 familySize
         );
@@ -573,6 +604,14 @@ public class QuoteService {
                 quote.getPcbaPlant(),
                 quote.getPcbOrigin(),
                 quote.getStatus(),
+                quote.isFaiReqPnc(),
+                quote.getFaiPcbWo(),
+                quote.getFaiPcbaWo(),
+                quote.getFaiHeadingPnc(),
+                quote.isFaiReqAs9102(),
+                quote.getFaiPcbWith(),
+                quote.getFaiPcbaWith(),
+                quote.getFaiHeadingAs9102(),
                 quote.getCreatedAt(),
                 quote.getUpdatedAt(),
                 quote.getQuantities().stream().map(QuoteService::toQuantityResponse).toList(),

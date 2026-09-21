@@ -140,6 +140,30 @@ public class Quote {
     @Column(name = "pcb_origin", length = 120)
     private String pcbOrigin;
 
+    @Column(name = "fai_req_pnc", nullable = false)
+    private boolean faiReqPnc = false;
+
+    @Column(name = "fai_pcb_wo", precision = 12, scale = 2)
+    private BigDecimal faiPcbWo;
+
+    @Column(name = "fai_pcba_wo", precision = 12, scale = 2)
+    private BigDecimal faiPcbaWo;
+
+    @Column(name = "fai_heading_pnc", length = 1000)
+    private String faiHeadingPnc;
+
+    @Column(name = "fai_req_as9102", nullable = false)
+    private boolean faiReqAs9102 = false;
+
+    @Column(name = "fai_pcb_with", precision = 12, scale = 2)
+    private BigDecimal faiPcbWith;
+
+    @Column(name = "fai_pcba_with", precision = 12, scale = 2)
+    private BigDecimal faiPcbaWith;
+
+    @Column(name = "fai_heading_as9102", length = 1000)
+    private String faiHeadingAs9102;
+
     @Column(name = "status", length = 80)
     private String status;
 
@@ -250,6 +274,22 @@ public class Quote {
     public void setPcbaPlant(String pcbaPlant) { this.pcbaPlant = pcbaPlant; }
     public String getPcbOrigin() { return pcbOrigin; }
     public void setPcbOrigin(String pcbOrigin) { this.pcbOrigin = pcbOrigin; }
+    public boolean isFaiReqPnc() { return faiReqPnc; }
+    public void setFaiReqPnc(boolean faiReqPnc) { this.faiReqPnc = faiReqPnc; }
+    public BigDecimal getFaiPcbWo() { return faiPcbWo; }
+    public void setFaiPcbWo(BigDecimal faiPcbWo) { this.faiPcbWo = faiPcbWo; }
+    public BigDecimal getFaiPcbaWo() { return faiPcbaWo; }
+    public void setFaiPcbaWo(BigDecimal faiPcbaWo) { this.faiPcbaWo = faiPcbaWo; }
+    public String getFaiHeadingPnc() { return faiHeadingPnc; }
+    public void setFaiHeadingPnc(String faiHeadingPnc) { this.faiHeadingPnc = faiHeadingPnc; }
+    public boolean isFaiReqAs9102() { return faiReqAs9102; }
+    public void setFaiReqAs9102(boolean faiReqAs9102) { this.faiReqAs9102 = faiReqAs9102; }
+    public BigDecimal getFaiPcbWith() { return faiPcbWith; }
+    public void setFaiPcbWith(BigDecimal faiPcbWith) { this.faiPcbWith = faiPcbWith; }
+    public BigDecimal getFaiPcbaWith() { return faiPcbaWith; }
+    public void setFaiPcbaWith(BigDecimal faiPcbaWith) { this.faiPcbaWith = faiPcbaWith; }
+    public String getFaiHeadingAs9102() { return faiHeadingAs9102; }
+    public void setFaiHeadingAs9102(String faiHeadingAs9102) { this.faiHeadingAs9102 = faiHeadingAs9102; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Long getCreatedByUserId() { return createdByUserId; }

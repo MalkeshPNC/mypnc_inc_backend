@@ -279,6 +279,41 @@ class QuoteServiceTest {
     }
 
     @Test
+    void createStoresPostedFaiValuesWhenRequiredIsOff() {
+        when(quoteRepository.existsByQuoteNumberIgnoreCase("2026NC-100")).thenReturn(false);
+        stubSaveAssigningId();
+        stubEmptyHistory();
+
+        QuoteResponse response = quoteService.create(withFai(
+                false, "300.00", "210.00", "PNC heading",
+                false, "450.00", "315.00", "AS heading"
+        ), 7L);
+
+        assertThat(response.faiReqPnc()).isFalse();
+        assertThat(response.faiPcbWo()).isEqualByComparingTo("300.00");
+        assertThat(response.faiPcbaWo()).isEqualByComparingTo("210.00");
+        assertThat(response.faiHeadingPnc()).isEqualTo("PNC heading");
+        assertThat(response.faiReqAs9102()).isFalse();
+        assertThat(response.faiPcbWith()).isEqualByComparingTo("450.00");
+        assertThat(response.faiPcbaWith()).isEqualByComparingTo("315.00");
+        assertThat(response.faiHeadingAs9102()).isEqualTo("AS heading");
+    }
+
+    @Test
+    void createRejectsMissingFaiPriceWhenRequired() {
+        when(quoteRepository.existsByQuoteNumberIgnoreCase("2026NC-100")).thenReturn(false);
+
+        assertThatThrownBy(() -> quoteService.create(withFai(
+                true, null, "210.00", "PNC heading",
+                false, null, null, null
+        ), 7L))
+                .isInstanceOf(QuoteValidationException.class)
+                .hasMessageContaining("PNC FAI PCB");
+
+        verify(quoteRepository, never()).save(any(Quote.class));
+    }
+
+    @Test
     void createRejectsDuplicateNumber() {
         when(quoteRepository.existsByQuoteNumberIgnoreCase("2026NC-100")).thenReturn(true);
 
@@ -302,7 +337,8 @@ class QuoteServiceTest {
         QuoteRequest withoutDate = new QuoteRequest(
                 "2026NC-100", null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
-                false, false, false, false, false, false, false, null, null, null, null
+                false, false, false, false, false, false, false, null, null, null,
+                false, null, null, null, false, null, null, null, null
         );
 
         assertThatThrownBy(() -> quoteService.create(withoutDate, 7L))
@@ -685,6 +721,18 @@ class QuoteServiceTest {
     }
 
     @Test
+    void findAllIncludesSamsReview() {
+        Quote existing = existingQuote();
+        existing.setSamsReview(true);
+        when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existing));
+        when(lockRepository.findAllByQidIn(List.of(12L))).thenReturn(List.of());
+
+        var summaries = quoteService.findAll(7L);
+
+        assertThat(summaries.get(0).samsReview()).isTrue();
+    }
+
+    @Test
     void findAllDecoratesQuotesWithTheirCurrentLockHolder() {
         Quote existing = existingQuote();
         when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existing));
@@ -813,6 +861,28 @@ class QuoteServiceTest {
         return value == null ? null : new BigDecimal(value);
     }
 
+    private static QuoteRequest withFai(
+            boolean reqPnc, String pcbWo, String pcbaWo, String headingPnc,
+            boolean reqAs9102, String pcbWith, String pcbaWith, String headingAs9102
+    ) {
+        QuoteRequest base = request("2026NC-100", List.of());
+        return new QuoteRequest(
+                base.quoteNumber(), base.quoteType(), base.projectNumber(), base.createDate(),
+                base.submitDate(), base.custId(), base.customerName(), base.contId(),
+                base.contactName(), base.customerRfq(), base.ncId(), base.ncNumber(),
+                base.assyNumber(), base.pcbaRevision(), base.pcbNumber(), base.pcbRevision(),
+                base.assyQuoteStatus(), base.pcbQuoteNumber(), base.pcbQuoteStatus(),
+                base.array(), base.commissionPercentage(), base.internalNote1(),
+                base.internalNote2(), base.notesToCustomer(), base.otherNreCharges(),
+                base.receivedDate(), base.pncNotes(), base.laborOnly(), base.partsScheduled(),
+                base.feedback(), base.itarc(), base.berryc(), base.samsReview(),
+                base.pcbaPlant(), base.pcbOrigin(), base.status(),
+                reqPnc, dec(pcbWo), dec(pcbaWo), headingPnc,
+                reqAs9102, dec(pcbWith), dec(pcbaWith), headingAs9102,
+                base.quantities()
+        );
+    }
+
     private static QuoteRequest request(String quoteNumber, List<QuoteQuantityRequest> quantities) {
         return request(quoteNumber, quantities, "Open", null, null, "5.00");
     }
@@ -829,7 +899,10 @@ class QuoteServiceTest {
                 base.internalNote2(), base.notesToCustomer(), base.otherNreCharges(),
                 base.receivedDate(), base.pncNotes(), base.laborOnly(), base.partsScheduled(),
                 base.feedback(), base.itarc(), base.berryc(), base.samsReview(),
-                base.pcbaPlant(), base.pcbOrigin(), base.status(), base.quantities()
+                base.pcbaPlant(), base.pcbOrigin(), base.status(),
+                base.faiReqPnc(), base.faiPcbWo(), base.faiPcbaWo(), base.faiHeadingPnc(),
+                base.faiReqAs9102(), base.faiPcbWith(), base.faiPcbaWith(), base.faiHeadingAs9102(),
+                base.quantities()
         );
     }
 
@@ -886,6 +959,14 @@ class QuoteServiceTest {
                 "Plant A",
                 "USA",
                 status,
+                false,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
                 quantities
         );
     }

@@ -4,6 +4,8 @@ import com.pnc.masters.configuration.api.ConfigurationBundleResponse;
 import com.pnc.masters.configuration.api.ConfigurationCreateRequest;
 import com.pnc.masters.configuration.api.ConfigurationResponse;
 import com.pnc.masters.configuration.api.ConfigurationUpdateRequest;
+import com.pnc.masters.configuration.api.QuoteFaiConfigRequest;
+import com.pnc.masters.configuration.api.QuoteFaiConfigResponse;
 import com.pnc.masters.configuration.api.SubConfigurationEntryRequest;
 import com.pnc.masters.configuration.api.SubConfigurationEntryResponse;
 import com.pnc.masters.configuration.api.SubConfigurationTypeRequest;
@@ -29,21 +31,39 @@ public class AppConfigurationController {
 
     private final AppConfigurationService configurationService;
     private final SubConfigurationService subConfigurationService;
+    private final QuoteFaiConfigService faiConfigService;
 
     public AppConfigurationController(
             AppConfigurationService configurationService,
-            SubConfigurationService subConfigurationService
+            SubConfigurationService subConfigurationService,
+            QuoteFaiConfigService faiConfigService
     ) {
         this.configurationService = configurationService;
         this.subConfigurationService = subConfigurationService;
+        this.faiConfigService = faiConfigService;
     }
 
     @GetMapping
     public ConfigurationBundleResponse findAll() {
         return new ConfigurationBundleResponse(
                 configurationService.findAll(),
-                subConfigurationService.findAllTypes()
+                subConfigurationService.findAllTypes(),
+                faiConfigService.find()
         );
+    }
+
+    @GetMapping("/fai")
+    public QuoteFaiConfigResponse findFai() {
+        return faiConfigService.find();
+    }
+
+    @PutMapping("/fai")
+    public QuoteFaiConfigResponse updateFai(
+            @RequestBody QuoteFaiConfigRequest request,
+            Authentication authentication
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return faiConfigService.update(request, userId);
     }
 
     @PostMapping
