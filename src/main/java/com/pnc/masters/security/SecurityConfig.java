@@ -51,11 +51,11 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/signup",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password"
                         ).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/configurations", "/api/v1/configurations/**").authenticated()
                         .requestMatchers("/api/v1/configurations", "/api/v1/configurations/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/roles", "/api/v1/roles/**").hasRole("ADMIN")
@@ -78,12 +78,13 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:4200", "http://localhost:58877", "http://192.168.1.31:4200"));
+        configuration.setAllowedOrigins(List.of("http://localhost:4200", "http://localhost:58877", "http://192.168.1.122:4200"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/ws/**", configuration);
         return source;
     }
 }

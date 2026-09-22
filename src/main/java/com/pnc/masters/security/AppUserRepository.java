@@ -14,6 +14,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
     List<AppUser> findAllByOrderByEmailAsc();
 
+    List<AppUser> findByEnabledTrueAndUserIdNotOrderByDisplayNameAsc(Long userId);
+
     @Query("""
             SELECT COUNT(u) FROM AppUser u
             JOIN u.roles r

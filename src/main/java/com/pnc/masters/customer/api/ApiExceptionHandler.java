@@ -1,5 +1,10 @@
 package com.pnc.masters.customer.api;
 
+import com.pnc.masters.chat.api.ChatConversationNotFoundException;
+import com.pnc.masters.chat.api.ChatForbiddenException;
+import com.pnc.masters.chat.api.ChatMessageValidationException;
+import com.pnc.masters.chat.api.ChatPeerNotFoundException;
+import com.pnc.masters.chat.api.ChatRateLimitedException;
 import com.pnc.masters.configuration.api.ConfigurationKeyExistsException;
 import com.pnc.masters.configuration.api.ConfigurationNotFoundException;
 import com.pnc.masters.configuration.api.FaiConfigValidationException;
@@ -168,6 +173,31 @@ public class ApiExceptionHandler {
     @ExceptionHandler(RoleConflictException.class)
     public ResponseEntity<Map<String, Object>> handleRoleConflict(RoleConflictException exception) {
         return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatConversationNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleChatConversationNotFound(ChatConversationNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatPeerNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleChatPeerNotFound(ChatPeerNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleChatForbidden(ChatForbiddenException exception) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatMessageValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleChatValidation(ChatMessageValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatRateLimitedException.class)
+    public ResponseEntity<Map<String, Object>> handleChatRateLimited(ChatRateLimitedException exception) {
+        return response(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

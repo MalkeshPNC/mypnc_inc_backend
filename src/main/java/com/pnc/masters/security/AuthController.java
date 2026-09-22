@@ -7,7 +7,6 @@ import com.pnc.masters.security.api.LoginRequest;
 import com.pnc.masters.security.api.MessageResponse;
 import com.pnc.masters.security.api.ProfileResponse;
 import com.pnc.masters.security.api.ResetPasswordRequest;
-import com.pnc.masters.security.api.SignupRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,11 +26,6 @@ public class AuthController {
     public AuthController(AuthService authService, PasswordResetService passwordResetService) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
-    }
-
-    @PostMapping("/signup")
-    public AuthResponse signup(@Valid @RequestBody SignupRequest request) {
-        return authService.signup(request);
     }
 
     @PostMapping("/login")
