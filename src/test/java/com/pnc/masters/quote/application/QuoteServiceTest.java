@@ -723,12 +723,16 @@ class QuoteServiceTest {
     @Test
     void findAllIncludesSamsReview() {
         Quote existing = existingQuote();
+        existing.setItarc(true);
+        existing.setBerryc(true);
         existing.setSamsReview(true);
         when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existing));
         when(lockRepository.findAllByQidIn(List.of(12L))).thenReturn(List.of());
 
         var summaries = quoteService.findAll(7L);
 
+        assertThat(summaries.get(0).itarc()).isTrue();
+        assertThat(summaries.get(0).berryc()).isTrue();
         assertThat(summaries.get(0).samsReview()).isTrue();
     }
 

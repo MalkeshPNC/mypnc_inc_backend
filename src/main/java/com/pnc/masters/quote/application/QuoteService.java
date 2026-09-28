@@ -552,6 +552,8 @@ public class QuoteService {
                 quote.getAssyQuoteStatus(),
                 quote.getPcbQuoteStatus(),
                 quote.getStatus(),
+                quote.isItarc(),
+                quote.isBerryc(),
                 quote.isSamsReview(),
                 lock,
                 familySize

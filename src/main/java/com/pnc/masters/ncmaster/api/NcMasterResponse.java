@@ -9,9 +9,9 @@ public record NcMasterResponse(
         String pcbRev,
         String pcbaPartNumber,
         String pcbaRev,
-        String pcbaAlert,
         String notes,
         String ncAlert,
+        String pcbaNotes,
         String createdBy,
         Long createdByUserId,
         LocalDateTime createdAt

@@ -3,6 +3,7 @@ package com.pnc.masters.ncmaster;
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcMasterResponse;
 import com.pnc.masters.ncmaster.api.NcNumberAvailabilityResponse;
+import com.pnc.masters.ncmaster.api.PcbaNoteLookupResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -40,6 +41,11 @@ public class NcMasterController {
             @RequestParam(required = false) Long excludeNcId
     ) {
         return ncMasterService.checkNcNumber(ncNumber, excludeNcId);
+    }
+
+    @GetMapping("/pcba-notes")
+    public PcbaNoteLookupResponse pcbaNotes(@RequestParam String partNumber) {
+        return ncMasterService.lookupPcbaNote(partNumber);
     }
 
     @PostMapping

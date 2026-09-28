@@ -45,10 +45,16 @@ quote:
   lock:
     idle-timeout-ms: ${QUOTE_LOCK_IDLE_TIMEOUT:300000}
 
+app:
+  origins: ${APP_ORIGINS:}
+
+web:
+  root: ${WEB_ROOT:}
+
 auth:
   jwt-secret: ${JWT_SECRET:pnc-masters-dev-jwt-secret-key-32b!!}
   jwt-expiration-ms: ${JWT_EXPIRATION:28800000}
   bootstrap-email: ${AUTH_BOOTSTRAP_EMAIL:admin@mypncinc.local}
-  bootstrap-password: ${AUTH_BOOTSTRAP_PASSWORD:Admin123!}
+  bootstrap-password: ${AUTH_BOOTSTRAP_PASSWORD:Admin@123}
   reset-link-base-url: ${AUTH_RESET_LINK_BASE_URL:http://localhost:4200}
   reset-token-ttl-ms: ${AUTH_RESET_TOKEN_TTL:3600000}

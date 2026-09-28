@@ -16,6 +16,7 @@ import com.pnc.masters.contact.api.ContactNotFoundException;
 import com.pnc.masters.document.api.DocumentNotFoundException;
 import com.pnc.masters.document.api.DocumentValidationException;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
+import com.pnc.masters.ncmaster.api.NcMasterValidationException;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
 import com.pnc.masters.quote.api.QuoteLockedException;
 import com.pnc.masters.quote.api.QuoteNotFoundException;
@@ -80,6 +81,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NcNumberExistsException.class)
     public ResponseEntity<Map<String, Object>> handleNcNumberExists(NcNumberExistsException exception) {
         return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(NcMasterValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleNcMasterValidation(NcMasterValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(QuoteNotFoundException.class)

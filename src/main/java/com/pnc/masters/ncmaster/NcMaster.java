@@ -34,9 +34,6 @@ public class NcMaster {
     @Column(name = "pcba_rev", length = 40)
     private String pcbaRev;
 
-    @Column(name = "pcba_alert", columnDefinition = "TEXT")
-    private String pcbaAlert;
-
     @Column(columnDefinition = "TEXT")
     private String notes;
 
@@ -71,8 +68,6 @@ public class NcMaster {
     public void setPcbaPartNumber(String pcbaPartNumber) { this.pcbaPartNumber = pcbaPartNumber; }
     public String getPcbaRev() { return pcbaRev; }
     public void setPcbaRev(String pcbaRev) { this.pcbaRev = pcbaRev; }
-    public String getPcbaAlert() { return pcbaAlert; }
-    public void setPcbaAlert(String pcbaAlert) { this.pcbaAlert = pcbaAlert; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
     public String getNcAlert() { return ncAlert; }

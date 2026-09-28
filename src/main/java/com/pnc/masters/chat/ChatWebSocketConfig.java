@@ -1,5 +1,6 @@
 package com.pnc.masters.chat;
 
+import com.pnc.masters.security.AppOriginProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -14,17 +15,13 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class ChatWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    static final String[] ALLOWED_ORIGINS = {
-            "http://localhost:4200",
-            "http://localhost:58877",
-            "http://192.168.1.122:4200"
-    };
-
     private final ChatStompAuthChannelInterceptor authInterceptor;
+    private final String[] allowedOrigins;
     private final TaskScheduler heartbeatScheduler = heartbeatScheduler();
 
-    public ChatWebSocketConfig(ChatStompAuthChannelInterceptor authInterceptor) {
+    public ChatWebSocketConfig(ChatStompAuthChannelInterceptor authInterceptor, AppOriginProperties origins) {
         this.authInterceptor = authInterceptor;
+        this.allowedOrigins = origins.originList().toArray(String[]::new);
     }
 
     @Override
@@ -38,8 +35,8 @@ public class ChatWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws/chat").setAllowedOrigins(ALLOWED_ORIGINS);
-        registry.addEndpoint("/ws/chat").setAllowedOrigins(ALLOWED_ORIGINS).withSockJS();
+        registry.addEndpoint("/ws/chat").setAllowedOrigins(allowedOrigins);
+        registry.addEndpoint("/ws/chat").setAllowedOrigins(allowedOrigins).withSockJS();
     }
 
     @Override

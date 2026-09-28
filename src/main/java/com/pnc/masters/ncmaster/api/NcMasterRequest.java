@@ -9,8 +9,8 @@ public record NcMasterRequest(
         @Size(max = 40) String pcbRev,
         @Size(max = 120) String pcbaPartNumber,
         @Size(max = 40) String pcbaRev,
-        String pcbaAlert,
         String notes,
-        String ncAlert
+        String ncAlert,
+        String pcbaNotes
 ) {
 }

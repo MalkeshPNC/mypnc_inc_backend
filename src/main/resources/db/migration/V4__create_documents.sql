@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS tbldocuments (
     original_filename VARCHAR(255) NOT NULL,
     content_type VARCHAR(255) NOT NULL,
     file_size BIGINT NOT NULL,
-    checksum_sha256 CHAR(64) NOT NULL,
+    checksum_sha256 VARCHAR(64) NOT NULL,
     storage_key VARCHAR(255) NOT NULL,
     storage_provider VARCHAR(50) NOT NULL,
     created_at DATETIME NOT NULL,

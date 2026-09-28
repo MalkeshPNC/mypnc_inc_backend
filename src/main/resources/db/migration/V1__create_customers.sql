@@ -2,7 +2,6 @@ CREATE TABLE IF NOT EXISTS tblcustomers (
     cust_id BIGINT NOT NULL AUTO_INCREMENT,
     customer VARCHAR(200) NOT NULL,
     company_logo VARCHAR(500),
-    commission DECIMAL(10, 2),
     cust_entry_dt DATETIME NOT NULL,
     referred_by VARCHAR(200),
     remarks TEXT,

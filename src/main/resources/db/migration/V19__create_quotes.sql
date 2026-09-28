@@ -7,9 +7,9 @@ CREATE TABLE tblquotes (
     submit_date DATE NULL,
     -- tblcustomers.cust_id and tblcontacts.cont_id are BIGINT UNSIGNED, so the
     -- referencing columns have to match exactly or MySQL rejects the FK.
-    cust_id BIGINT UNSIGNED NULL,
+    cust_id BIGINT NULL,
     customer_name VARCHAR(200) NULL,
-    cont_id BIGINT UNSIGNED NULL,
+    cont_id BIGINT NULL,
     contact_name VARCHAR(200) NULL,
     customer_rfq VARCHAR(120) NULL,
     nc_id BIGINT NULL,

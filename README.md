@@ -47,6 +47,30 @@ mvn package
 
 The API is available at `http://localhost:8080`. OpenAPI UI is at `http://localhost:8080/swagger-ui/index.html`. Health is at `http://localhost:8080/actuator/health`.
 
+`mvn spring-boot:run` stays on this PC and listens only on `127.0.0.1`. The Angular dev server stays on `http://localhost:4200`.
+
+## Staging
+
+On another Windows PC, install JDK 21 and MySQL 8, then create the `mypncinc` database. Copy `target/pnc-inc-api-0.1.0.jar` into an `app` folder, and copy the contents of `dev-frontend/dist/web/browser` into a `web` folder beside it. Do not reuse the development JWT secret or admin password.
+
+From that folder:
+for staging server
+```powershell
+$env:MYSQL_URL = "jdbc:mysql://localhost:3306/mypncinc?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+$env:MYSQL_USER = "root"
+$env:MYSQL_PASSWORD = "root"
+$env:JWT_SECRET = "a-long-random-staging-secret-at-least-32-chars"
+$env:AUTH_BOOTSTRAP_EMAIL = "admin@mypncinc.local"
+$env:AUTH_BOOTSTRAP_PASSWORD = "choose-a-staging-password"
+$env:AUTH_RESET_LINK_BASE_URL = "http://localhost:8080"
+$env:DOCUMENT_STORAGE_ROOT = "C:\mypncinc\data\documents"
+$env:WEB_ROOT = "C:\mypncinc\web"
+$env:APP_ORIGINS = "http://localhost:8080,http://192.10.67.130:8080"
+java -jar app\pnc-inc-api-0.1.0.jar --spring.profiles.active=staging
+```
+
+The staging profile listens on every interface. When `WEB_ROOT` is set, the API serves that folder and sends unknown site paths to `index.html`. Testers open `http://<staging-pc-ip>:8080`. Allow port 8080 through Windows Firewall. `APP_ORIGINS` is the comma-separated list of browser addresses allowed for login and chat; leave it unset in development to keep the current localhost list.
+
 ## Endpoints
 
 | Method | Path | Description |

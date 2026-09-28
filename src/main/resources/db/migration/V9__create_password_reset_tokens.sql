@@ -1,6 +1,6 @@
 CREATE TABLE tblpassword_reset_tokens (
     token_id BIGINT NOT NULL AUTO_INCREMENT,
-    token_hash CHAR(64) NOT NULL,
+    token_hash VARCHAR(64) NOT NULL,
     user_id BIGINT NOT NULL,
     expires_at DATETIME NOT NULL,
     used_at DATETIME NULL,

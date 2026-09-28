@@ -17,6 +17,8 @@ public record QuoteSummaryResponse(
         String assyQuoteStatus,
         String pcbQuoteStatus,
         String status,
+        boolean itarc,
+        boolean berryc,
         boolean samsReview,
         QuoteLockResponse lock,
         int familySize
