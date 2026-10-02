@@ -28,8 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -49,6 +51,9 @@ public class QuoteService {
 
     private static final Set<String> CREATE_DATE_ROLES = Set.of("ADMIN");
 
+    /** Stands in for "no quote to leave out" in the number lookups. */
+    private static final Long NO_QUOTE = 0L;
+
     /** The quotestatus entry that means the quote went out to the customer. */
     private static final String SUBMITTED_STATUS = "submitted";
 
@@ -67,29 +72,37 @@ public class QuoteService {
     private final AppUserRepository userRepository;
     private final NcMasterRepository ncMasterRepository;
     private final ContactRepository contactRepository;
+    private final Clock clock;
 
     public QuoteService(QuoteRepository quoteRepository,
                         QuoteHistoryRepository historyRepository,
                         QuoteLockService lockService,
                         AppUserRepository userRepository,
                         NcMasterRepository ncMasterRepository,
-                        ContactRepository contactRepository) {
+                        ContactRepository contactRepository,
+                        Clock clock) {
         this.quoteRepository = quoteRepository;
         this.historyRepository = historyRepository;
         this.lockService = lockService;
         this.userRepository = userRepository;
         this.ncMasterRepository = ncMasterRepository;
         this.contactRepository = contactRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public List<QuoteSummaryResponse> findAll(Long userId) {
         List<Quote> quotes = quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc();
-        Map<Long, QuoteLockResponse> locks =
-                lockService.findAll(quotes.stream().map(Quote::getQid).toList(), userId);
-        Map<String, Integer> familyCounts = familyCounts(quotes);
+        List<Long> qids = quotes.stream().map(Quote::getQid).toList();
+        Map<Long, QuoteLockResponse> locks = lockService.findAll(qids, userId);
+        Map<String, Integer> ncCounts = ncCounts(quotes);
+        Map<Long, BigDecimal> receivedTotals = receivedTotals(qids);
         return quotes.stream()
-                .map(quote -> toSummary(quote, locks.get(quote.getQid()), familySize(quote, familyCounts)))
+                .map(quote -> toSummary(
+                        quote,
+                        locks.get(quote.getQid()),
+                        ncSize(quote, ncCounts),
+                        receivedTotals.getOrDefault(quote.getQid(), BigDecimal.ZERO)))
                 .toList();
     }
 
@@ -99,45 +112,90 @@ public class QuoteService {
     }
 
     /**
-     * All non-deleted quotes in the copy family, original first then numeric suffix.
-     * History and lock are omitted; compare does not need them.
+     * Every non-deleted quote with the same NC, oldest first.
+     * A blank NC compares as itself. History and lock are omitted.
      */
     @Transactional(readOnly = true)
     public QuoteFamilyResponse findFamily(Long id, Long userId) {
         Quote source = getQuote(id);
-        String family = quoteFamily(source.getQuoteNumber());
-        List<Quote> members = new ArrayList<>(quoteRepository.findFamilyQuotes(family));
-        members.sort(Comparator.comparingInt(quote -> familySortKey(quote.getQuoteNumber(), family)));
+        String nc = ncText(source.getNcNumber());
+        List<Quote> members = nc.isEmpty()
+                ? new ArrayList<>(List.of(source))
+                : new ArrayList<>(quoteRepository.findByNcNumberIgnoreCaseAndIsDeletedFalse(nc));
+        members.sort(Comparator
+                .comparing(Quote::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(Quote::getQid, Comparator.nullsLast(Comparator.naturalOrder())));
         int size = members.size();
         List<QuoteResponse> quotes = members.stream()
                 .map(quote -> toResponse(quote, userId, false, size))
                 .toList();
-        return new QuoteFamilyResponse(family, quotes);
+        return new QuoteFamilyResponse(nc, quotes);
     }
 
     /**
-     * Next Quote# in the copy family. The unsuffixed original is version 1, so
-     * the first copy is {@code family.2}, then {@code family.(maxSuffix + 1)}.
-     * Gaps are not filled.
+     * Next Quote# for a copy. Same rule as a new quote: current year plus the
+     * NC, and one more than the highest revision of that NC in any year.
      */
     @Transactional(readOnly = true)
     public QuoteCopyNumberResponse nextCopyNumber(Long id) {
         Quote quote = getQuote(id);
-        String family = quoteFamily(quote.getQuoteNumber());
-        List<String> numbers = quoteRepository.findFamilyQuoteNumbers(family);
-        Pattern suffix = Pattern.compile("(?i)^" + Pattern.quote(family) + "\\.(\\d+)$");
-        // The bare family number is revision 1; copies start at .2.
-        int maxSuffix = 1;
+        String nc = ncOf(quote);
+        if (nc.isEmpty()) {
+            throw new QuoteValidationException("ncNumber is required");
+        }
+        return numberForNc(nc);
+    }
+
+    /**
+     * Quote# for an unsaved quote. A saved quote keeps the number it already has.
+     * When the NC is new the number is the current year plus the NC. When any
+     * quote already uses that NC, the number always carries the next revision.
+     */
+    @Transactional(readOnly = true)
+    public QuoteCopyNumberResponse nextNumberForNc(Long qid, String ncNumber) {
+        if (ncNumber == null || ncNumber.isBlank()) {
+            throw new QuoteValidationException("ncNumber is required");
+        }
+        if (qid != null) {
+            return new QuoteCopyNumberResponse(getQuote(qid).getQuoteNumber());
+        }
+        return numberForNc(ncNumber);
+    }
+
+    /**
+     * Current year plus the NC. No saved quote for that NC stays unsuffixed.
+     * Otherwise the suffix is one more than the highest {@code .n} in any year.
+     * A number with no suffix counts as revision 0. Gaps are not filled.
+     */
+    private QuoteCopyNumberResponse numberForNc(String ncNumber) {
+        String nc = ncNumber.trim().toUpperCase(Locale.ROOT);
+        String base = Year.now(clock).getValue() + nc;
+        List<String> numbers = quoteRepository.findQuoteNumbersForNc(nc, likeLiteral(nc), NO_QUOTE);
+        if (numbers.isEmpty()) {
+            return new QuoteCopyNumberResponse(base);
+        }
+        return new QuoteCopyNumberResponse(base + "." + (highestRevision(numbers, nc) + 1));
+    }
+
+    /** Highest {@code .n} for this NC; 0 when every match is unsuffixed or unparsed. */
+    private static int highestRevision(List<String> numbers, String nc) {
+        Pattern suffix = Pattern.compile("(?i)^\\d{4}" + Pattern.quote(nc) + "(?:\\.(\\d+))?$");
+        int highest = 0;
         for (String number : numbers) {
             if (number == null) {
                 continue;
             }
             Matcher matcher = suffix.matcher(number.trim());
-            if (matcher.matches()) {
-                maxSuffix = Math.max(maxSuffix, Integer.parseInt(matcher.group(1)));
+            if (matcher.matches() && matcher.group(1) != null) {
+                highest = Math.max(highest, Integer.parseInt(matcher.group(1)));
             }
         }
-        return new QuoteCopyNumberResponse(family + "." + (maxSuffix + 1));
+        return highest;
+    }
+
+    /** LIKE pattern for an NC, so {@code %} and {@code _} in the NC stay literal. */
+    private static String likeLiteral(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     /**
@@ -168,10 +226,8 @@ public class QuoteService {
     public QuoteResponse update(Long id, QuoteRequest request, Long userId) {
         Quote quote = getQuote(id);
         lockService.requireHeldBy(id, userId);
-        String quoteNumber = requireQuoteNumber(request);
-        if (quoteRepository.existsByQuoteNumberIgnoreCaseAndQidNot(quoteNumber, id)) {
-            throw new QuoteNumberExistsException(quoteNumber);
-        }
+        requireUnchangedNc(quote, request);
+        String quoteNumber = quote.getQuoteNumber();
         AppUser user = userRepository.findById(userId).orElse(null);
         String previousAqStatus = quote.getAssyQuoteStatus();
         String previousPqStatus = quote.getPcbQuoteStatus();
@@ -206,63 +262,65 @@ public class QuoteService {
     }
 
     /**
-     * Family is the quote number with a trailing {@code .digits} stripped, so
-     * {@code 2026NC-100} and {@code 2026NC-100.1} share {@code 2026NC-100}.
-     * Copying {@code .1} still uses that family, not {@code .1.1}.
+     * NC used to number a copy. A blank stored NC is read out of the quote
+     * number, after the year and without a trailing revision.
      */
-    static String quoteFamily(String quoteNumber) {
-        if (quoteNumber == null || quoteNumber.isBlank()) {
+    private static String ncOf(Quote quote) {
+        String stored = ncText(quote.getNcNumber());
+        if (!stored.isEmpty()) {
+            return stored.toUpperCase(Locale.ROOT);
+        }
+        String number = quote.getQuoteNumber();
+        if (number == null || number.isBlank()) {
             return "";
         }
-        return quoteNumber.trim().replaceFirst("\\.\\d+$", "");
+        String body = number.trim().replaceFirst("(?i)\\.\\d+$", "");
+        return body.replaceFirst("^\\d{4}", "").toUpperCase(Locale.ROOT);
     }
 
-    private static Map<String, Integer> familyCounts(List<Quote> quotes) {
+    private static String ncText(String ncNumber) {
+        return ncNumber == null ? "" : ncNumber.trim();
+    }
+
+    private static void requireUnchangedNc(Quote quote, QuoteRequest request) {
+        if (!sameNc(quote.getNcNumber(), request.ncNumber()) || !sameId(quote.getNcId(), request.ncId())) {
+            throw new QuoteValidationException("ncNumber cannot be changed");
+        }
+    }
+
+    private static boolean sameNc(String left, String right) {
+        return ncText(left).equalsIgnoreCase(ncText(right));
+    }
+
+    private static boolean sameId(Long left, Long right) {
+        return left == null ? right == null : left.equals(right);
+    }
+
+    private static Map<String, Integer> ncCounts(List<Quote> quotes) {
         Map<String, Integer> counts = new HashMap<>();
         for (Quote quote : quotes) {
-            String family = quoteFamily(quote.getQuoteNumber());
-            if (!family.isBlank()) {
-                counts.merge(family.toLowerCase(Locale.ROOT), 1, Integer::sum);
+            String nc = ncText(quote.getNcNumber()).toLowerCase(Locale.ROOT);
+            if (!nc.isEmpty()) {
+                counts.merge(nc, 1, Integer::sum);
             }
         }
         return counts;
     }
 
-    private static int familySize(Quote quote, Map<String, Integer> familyCounts) {
-        String family = quoteFamily(quote.getQuoteNumber());
-        if (family.isBlank()) {
+    private static int ncSize(Quote quote, Map<String, Integer> ncCounts) {
+        String nc = ncText(quote.getNcNumber()).toLowerCase(Locale.ROOT);
+        if (nc.isEmpty()) {
             return 1;
         }
-        return familyCounts.getOrDefault(family.toLowerCase(Locale.ROOT), 1);
+        return ncCounts.getOrDefault(nc, 1);
     }
 
-    private int familySize(Quote quote) {
-        String family = quoteFamily(quote.getQuoteNumber());
-        if (family.isBlank()) {
+    private int ncSize(Quote quote) {
+        String nc = ncText(quote.getNcNumber());
+        if (nc.isEmpty()) {
             return 1;
         }
-        return Math.max(1, quoteRepository.findFamilyQuoteNumbers(family).size());
-    }
-
-    /**
-     * Original (unsuffixed) first, then {@code family.2}, {@code family.3}, …
-     */
-    static int familySortKey(String quoteNumber, String family) {
-        if (quoteNumber == null || quoteNumber.isBlank()) {
-            return Integer.MAX_VALUE;
-        }
-        String trimmed = quoteNumber.trim();
-        if (family != null && trimmed.equalsIgnoreCase(family)) {
-            return 0;
-        }
-        if (family == null || family.isBlank()) {
-            return Integer.MAX_VALUE;
-        }
-        Matcher matcher = Pattern.compile("(?i)^" + Pattern.quote(family) + "\\.(\\d+)$").matcher(trimmed);
-        if (matcher.matches()) {
-            return Integer.parseInt(matcher.group(1));
-        }
-        return Integer.MAX_VALUE;
+        return Math.max(1, quoteRepository.findByNcNumberIgnoreCaseAndIsDeletedFalse(nc).size());
     }
 
     private void applyRequest(Quote quote, QuoteRequest request, String quoteNumber) {
@@ -536,7 +594,24 @@ public class QuoteService {
         historyRepository.save(entry);
     }
 
-    private QuoteSummaryResponse toSummary(Quote quote, QuoteLockResponse lock, int familySize) {
+    private Map<Long, BigDecimal> receivedTotals(List<Long> qids) {
+        if (qids.isEmpty()) {
+            return Map.of();
+        }
+        List<Object[]> rows = quoteRepository.sumReceivedTotals(qids);
+        if (rows == null) {
+            return Map.of();
+        }
+        Map<Long, BigDecimal> totals = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row[0] instanceof Number qid && row[1] instanceof BigDecimal total) {
+                totals.put(qid.longValue(), total);
+            }
+        }
+        return totals;
+    }
+
+    private QuoteSummaryResponse toSummary(Quote quote, QuoteLockResponse lock, int familySize, BigDecimal receivedTotal) {
         return new QuoteSummaryResponse(
                 quote.getQid(),
                 quote.getQuoteNumber(),
@@ -556,12 +631,14 @@ public class QuoteService {
                 quote.isBerryc(),
                 quote.isSamsReview(),
                 lock,
-                familySize
+                familySize,
+                quote.getCustId(),
+                receivedTotal
         );
     }
 
     private QuoteResponse toResponse(Quote quote, Long userId, boolean includeAudit) {
-        return toResponse(quote, userId, includeAudit, familySize(quote));
+        return toResponse(quote, userId, includeAudit, ncSize(quote));
     }
 
     private QuoteResponse toResponse(Quote quote, Long userId, boolean includeAudit, int familySize) {

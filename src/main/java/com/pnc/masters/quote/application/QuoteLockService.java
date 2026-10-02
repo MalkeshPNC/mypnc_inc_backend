@@ -91,6 +91,20 @@ public class QuoteLockService {
         lockRepository.findByQid(qid).ifPresent(lockRepository::delete);
     }
 
+    /** Hands the live lock to another user without leaving a gap where someone else can claim it. */
+    public void reassign(Long qid, Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        QuoteLock lock = lockRepository.findByQid(qid).orElse(null);
+        if (lock == null) {
+            lock = new QuoteLock();
+            lock.setQid(qid);
+        }
+        lock.setLockedByUserId(userId);
+        lock.setAcquiredAt(now);
+        lock.setLastSeenAt(now);
+        lockRepository.save(lock);
+    }
+
     @Transactional(readOnly = true)
     public QuoteLockResponse find(Long qid, Long userId) {
         LocalDateTime now = LocalDateTime.now();

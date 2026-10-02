@@ -36,12 +36,13 @@ class AppConfigurationServiceTest {
         when(repository.save(any(AppConfiguration.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ConfigurationResponse response = service.create(new ConfigurationCreateRequest(
-                "salesperson.defaultCommission", " 12.5 ", "  Default commission  ", false));
+                "salesperson.defaultCommission", " 12.5 ", "  Default commission  ", false, null));
 
         assertThat(response.configKey()).isEqualTo("salesperson.defaultCommission");
         assertThat(response.configValue()).isEqualTo("12.5");
         assertThat(response.description()).isEqualTo("Default commission");
         assertThat(response.useEditor()).isFalse();
+        assertThat(response.valueType()).isEqualTo("text");
         ArgumentCaptor<AppConfiguration> captor = ArgumentCaptor.forClass(AppConfiguration.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getUpdatedAt()).isNotNull();
@@ -52,7 +53,7 @@ class AppConfigurationServiceTest {
         when(repository.existsById("salesperson.defaultCommission")).thenReturn(true);
 
         assertThatThrownBy(() -> service.create(new ConfigurationCreateRequest(
-                "salesperson.defaultCommission", "10", null, false)))
+                "salesperson.defaultCommission", "10", null, false, null)))
                 .isInstanceOf(ConfigurationKeyExistsException.class);
     }
 
@@ -67,11 +68,12 @@ class AppConfigurationServiceTest {
 
         ConfigurationResponse response = service.update(
                 "salesperson.defaultCommission",
-                new ConfigurationUpdateRequest("15", "Updated", true));
+                new ConfigurationUpdateRequest("15", "Updated", true, "image"));
 
         assertThat(response.configValue()).isEqualTo("15");
         assertThat(response.description()).isEqualTo("Updated");
         assertThat(response.useEditor()).isTrue();
+        assertThat(response.valueType()).isEqualTo("image");
     }
 
     @Test

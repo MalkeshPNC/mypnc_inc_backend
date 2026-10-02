@@ -29,8 +29,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -74,16 +77,21 @@ class QuoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        QuoteLockProperties properties = new QuoteLockProperties();
-        properties.setIdleTimeoutMs(300_000L);
-        QuoteLockService lockService = new QuoteLockService(lockRepository, userRepository, properties);
-        quoteService = new QuoteService(
-                quoteRepository, historyRepository, lockService, userRepository, ncMasterRepository, contactRepository);
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2026-10-01T00:00:00Z"), ZoneOffset.UTC));
         lenient().when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "Ada Lovelace")));
         lenient().when(userRepository.findById(8L)).thenReturn(Optional.of(user(8L, "Grace Hopper")));
         lenient().when(ncMasterRepository.findById(any())).thenReturn(Optional.empty());
         lenient().when(contactRepository.findById(any())).thenReturn(Optional.empty());
-        lenient().when(quoteRepository.findFamilyQuoteNumbers(any())).thenReturn(List.of());
+        lenient().when(quoteRepository.findQuoteNumbersForNc(any(), any(), any())).thenReturn(List.of());
+        lenient().when(quoteRepository.findByNcNumberIgnoreCaseAndIsDeletedFalse(any())).thenReturn(List.of());
+    }
+
+    private QuoteService serviceWith(Clock clock) {
+        QuoteLockProperties properties = new QuoteLockProperties();
+        properties.setIdleTimeoutMs(300_000L);
+        QuoteLockService lockService = new QuoteLockService(lockRepository, userRepository, properties);
+        return new QuoteService(
+                quoteRepository, historyRepository, lockService, userRepository, ncMasterRepository, contactRepository, clock);
     }
 
     @Test
@@ -151,28 +159,68 @@ class QuoteServiceTest {
     }
 
     @Test
-    void nextCopyNumberUsesFamilyDotTwoWhenNoSuffixExists() {
-        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existingQuote()));
-        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100")).thenReturn(List.of("2026NC-100"));
+    void nextCopyNumberUsesDotOneWhenTheOnlyMatchIsUnsiffixed() {
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteWithNc("2026NC-100")));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L)).thenReturn(List.of("2026NC-100"));
 
-        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.2");
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.1");
+    }
+
+    @Test
+    void nextCopyNumberUsesTheCurrentYearAndTheLastRevision() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteWithNc("2026NC-100")));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
+                .thenReturn(List.of("2026NC-100", "2026NC-100.1"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2027NC-100.2");
+    }
+
+    @Test
+    void nextCopyNumberReadsTheNcFromTheNumberWhenTheNcIsBlank() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        Quote source = existingQuote();
+        source.setNcNumber(null);
+        source.setNcId(null);
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(source));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L)).thenReturn(List.of("2026NC-100"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2027NC-100.1");
+    }
+
+    @Test
+    void nextCopyNumberIncrementsPastTheHighestRevisionInAnyYear() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteWithNc("2026NC-100")));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
+                .thenReturn(List.of("2026NC-100", "2027NC-100.1"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2027NC-100.2");
+    }
+
+    @Test
+    void nextCopyNumberOfARevisionContinuesFromThatRevision() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteWithNc("2026NC-100.1")));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L)).thenReturn(List.of("2026NC-100.1"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2027NC-100.2");
     }
 
     @Test
     void nextCopyNumberIncrementsPastAnExistingDotTwo() {
-        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existingQuote()));
-        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100"))
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteWithNc("2026NC-100")));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
                 .thenReturn(List.of("2026NC-100", "2026NC-100.2"));
 
         assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.3");
     }
 
     @Test
-    void nextCopyNumberUsesTheFamilyMaxWhenCopyingARevision() {
-        Quote source = existingQuote();
-        source.setQuoteNumber("2026NC-100.2");
+    void nextCopyNumberUsesTheHighestRevisionWhenCopyingARevision() {
+        Quote source = quoteWithNc("2026NC-100.2");
         when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(source));
-        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100"))
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
                 .thenReturn(List.of("2026NC-100", "2026NC-100.2", "2026NC-100.3"));
 
         assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.4");
@@ -180,11 +228,76 @@ class QuoteServiceTest {
 
     @Test
     void nextCopyNumberSkipsGapsInTheSuffix() {
-        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existingQuote()));
-        when(quoteRepository.findFamilyQuoteNumbers("2026NC-100"))
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteWithNc("2026NC-100")));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
                 .thenReturn(List.of("2026NC-100", "2026NC-100.2", "2026NC-100.4"));
 
         assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2026NC-100.5");
+    }
+
+    @Test
+    void nextCopyNumberUsesRevisionSevenWhenTheHighestIsSix() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteWithNc("2025NC-100.6")));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
+                .thenReturn(List.of("2025NC-100.6", "2026NC-100.2"));
+
+        assertThat(quoteService.nextCopyNumber(12L).quoteNumber()).isEqualTo("2027NC-100.7");
+    }
+
+    @Test
+    void nextNumberForNcUsesTheBareNumberWhenNothingHasIt() {
+        when(quoteRepository.findQuoteNumbersForNc("NC-200", "NC-200", 0L)).thenReturn(List.of());
+
+        assertThat(quoteService.nextNumberForNc(null, "NC-200").quoteNumber()).isEqualTo("2026NC-200");
+    }
+
+    @Test
+    void nextNumberForNcTakesTheNextRevisionWhenTheNumberIsTaken() {
+        when(quoteRepository.findQuoteNumbersForNc("NC-200", "NC-200", 0L))
+                .thenReturn(List.of("2026NC-200", "2026NC-200.1"));
+
+        assertThat(quoteService.nextNumberForNc(null, "NC-200").quoteNumber()).isEqualTo("2026NC-200.2");
+    }
+
+    @Test
+    void nextNumberForNcKeepsTheSavedNumber() {
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(quoteAt(12L, "2026NC-200.3")));
+
+        assertThat(quoteService.nextNumberForNc(12L, "NC-200").quoteNumber()).isEqualTo("2026NC-200.3");
+    }
+
+    @Test
+    void nextNumberForNcContinuesFromTheHighestRevisionInAnotherYear() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
+                .thenReturn(List.of("2026NC-100", "2026NC-100.1"));
+
+        assertThat(quoteService.nextNumberForNc(null, "NC-100").quoteNumber()).isEqualTo("2027NC-100.2");
+    }
+
+    @Test
+    void nextNumberForNcGivesALoneBareNumberARevision() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L)).thenReturn(List.of("2026NC-100"));
+
+        assertThat(quoteService.nextNumberForNc(null, "NC-100").quoteNumber()).isEqualTo("2027NC-100.1");
+    }
+
+    @Test
+    void nextNumberForNcUsesRevisionSevenWhenTheHighestIsSix() {
+        quoteService = serviceWith(Clock.fixed(Instant.parse("2027-03-01T00:00:00Z"), ZoneOffset.UTC));
+        when(quoteRepository.findQuoteNumbersForNc("NC-100", "NC-100", 0L))
+                .thenReturn(List.of("2025NC-100.6", "2026NC-100.2"));
+
+        assertThat(quoteService.nextNumberForNc(null, "NC-100").quoteNumber()).isEqualTo("2027NC-100.7");
+    }
+
+    @Test
+    void nextNumberForNcRejectsABlankNc() {
+        assertThatThrownBy(() -> quoteService.nextNumberForNc(null, " "))
+                .isInstanceOf(QuoteValidationException.class)
+                .hasMessageContaining("ncNumber");
     }
 
     @Test
@@ -196,16 +309,17 @@ class QuoteServiceTest {
     }
 
     @Test
-    void findFamilyOrdersOriginalThenNumericSuffixes() {
+    void findFamilyOrdersQuotesWithTheSameNcByAge() {
         Quote original = existingQuote();
-        Quote second = quoteAt(13L, "2026NC-100.2");
-        Quote third = quoteAt(14L, "2026NC-100.3");
+        Quote second = quoteWithNcAt(13L, "2026NC-100.2");
+        Quote third = quoteWithNcAt(14L, "2026NC-100.3");
         when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(original));
-        when(quoteRepository.findFamilyQuotes("2026NC-100")).thenReturn(List.of(third, original, second));
+        when(quoteRepository.findByNcNumberIgnoreCaseAndIsDeletedFalse("NC-100"))
+                .thenReturn(List.of(third, original, second));
 
         var family = quoteService.findFamily(12L, 7L);
 
-        assertThat(family.family()).isEqualTo("2026NC-100");
+        assertThat(family.family()).isEqualTo("NC-100");
         assertThat(family.quotes()).extracting(QuoteResponse::quoteNumber)
                 .containsExactly("2026NC-100", "2026NC-100.2", "2026NC-100.3");
         assertThat(family.quotes()).allMatch(quote -> quote.history().isEmpty());
@@ -213,12 +327,13 @@ class QuoteServiceTest {
     }
 
     @Test
-    void findFamilyFromARevisionStillReturnsTheWholeFamily() {
+    void findFamilyFromARevisionStillReturnsEveryQuoteWithThatNc() {
         Quote original = existingQuote();
-        Quote second = quoteAt(13L, "2026NC-100.2");
-        Quote third = quoteAt(14L, "2026NC-100.3");
+        Quote second = quoteWithNcAt(13L, "2026NC-100.2");
+        Quote third = quoteWithNcAt(14L, "2026NC-100.3");
         when(quoteRepository.findByQidAndIsDeletedFalse(13L)).thenReturn(Optional.of(second));
-        when(quoteRepository.findFamilyQuotes("2026NC-100")).thenReturn(List.of(original, second, third));
+        when(quoteRepository.findByNcNumberIgnoreCaseAndIsDeletedFalse("NC-100"))
+                .thenReturn(List.of(original, second, third));
 
         var family = quoteService.findFamily(13L, 7L);
 
@@ -229,15 +344,45 @@ class QuoteServiceTest {
     @Test
     void findFamilyOmitsQuotesTheRepositoryDoesNotReturn() {
         Quote original = existingQuote();
-        Quote second = quoteAt(13L, "2026NC-100.2");
+        Quote second = quoteWithNcAt(13L, "2026NC-100.2");
         when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(original));
-        when(quoteRepository.findFamilyQuotes("2026NC-100")).thenReturn(List.of(original, second));
+        when(quoteRepository.findByNcNumberIgnoreCaseAndIsDeletedFalse("NC-100"))
+                .thenReturn(List.of(original, second));
 
         var family = quoteService.findFamily(12L, 7L);
 
         assertThat(family.quotes()).extracting(QuoteResponse::quoteNumber)
                 .containsExactly("2026NC-100", "2026NC-100.2");
         assertThat(family.quotes()).extracting(QuoteResponse::qid).doesNotContain(99L);
+    }
+
+    @Test
+    void findFamilyIncludesEveryYearForTheSameNc() {
+        Quote original = existingQuote();
+        Quote copy = quoteWithNcAt(13L, "2027NC-100.1");
+        copy.setCreatedAt(LocalDateTime.of(2027, 2, 1, 0, 0));
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(original));
+        when(quoteRepository.findByNcNumberIgnoreCaseAndIsDeletedFalse("NC-100"))
+                .thenReturn(List.of(copy, original));
+
+        var family = quoteService.findFamily(12L, 7L);
+
+        assertThat(family.family()).isEqualTo("NC-100");
+        assertThat(family.quotes()).extracting(QuoteResponse::quoteNumber)
+                .containsExactly("2026NC-100", "2027NC-100.1");
+    }
+
+    @Test
+    void findFamilyWithABlankNcReturnsOnlyThatQuote() {
+        Quote original = existingQuote();
+        original.setNcNumber(null);
+        original.setNcId(null);
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(original));
+
+        var family = quoteService.findFamily(12L, 7L);
+
+        assertThat(family.family()).isEmpty();
+        assertThat(family.quotes()).extracting(QuoteResponse::qid).containsExactly(12L);
     }
 
     @Test
@@ -249,10 +394,11 @@ class QuoteServiceTest {
     }
 
     @Test
-    void findAllSetsFamilySizeFromSharedQuoteNumbers() {
+    void findAllSetsFamilySizeFromSharedNcNumbers() {
         Quote original = existingQuote();
-        Quote copy = quoteAt(13L, "2026NC-100.2");
+        Quote copy = quoteWithNcAt(13L, "2026NC-100.2");
         Quote other = quoteAt(20L, "2026NC-200");
+        other.setNcNumber("NC-200");
         when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc())
                 .thenReturn(List.of(original, copy, other));
         when(lockRepository.findAllByQidIn(List.of(12L, 13L, 20L))).thenReturn(List.of());
@@ -338,7 +484,7 @@ class QuoteServiceTest {
                 "2026NC-100", null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 false, false, false, false, false, false, false, null, null, null,
-                false, null, null, null, false, null, null, null, null
+                false, null, null, null, false, null, null, null, null, null
         );
 
         assertThatThrownBy(() -> quoteService.create(withoutDate, 7L))
@@ -363,6 +509,34 @@ class QuoteServiceTest {
     }
 
     @Test
+    void createStoresThePostedNumberWhenCopying() {
+        when(quoteRepository.existsByQuoteNumberIgnoreCase("2027NC-100.1")).thenReturn(false);
+        stubSaveAssigningId();
+        stubEmptyHistory();
+
+        quoteService.create(request("2027NC-100.1", null, 12L), 7L);
+
+        ArgumentCaptor<Quote> captor = ArgumentCaptor.forClass(Quote.class);
+        verify(quoteRepository).save(captor.capture());
+        assertThat(captor.getValue().getQuoteNumber()).isEqualTo("2027NC-100.1");
+        assertThat(captor.getValue().getNcNumber()).isEqualTo("NC-100");
+    }
+
+    @Test
+    void createStoresThePostedNumberWhenTheCopyMovesToAnotherNc() {
+        when(quoteRepository.existsByQuoteNumberIgnoreCase("2026NC-200")).thenReturn(false);
+        stubSaveAssigningId();
+        stubEmptyHistory();
+
+        quoteService.create(copyRequestWithNc("2026NC-200", "NC-200", 12L), 7L);
+
+        ArgumentCaptor<Quote> captor = ArgumentCaptor.forClass(Quote.class);
+        verify(quoteRepository).save(captor.capture());
+        assertThat(captor.getValue().getQuoteNumber()).isEqualTo("2026NC-200");
+        assertThat(captor.getValue().getNcNumber()).isEqualTo("NC-200");
+    }
+
+    @Test
     void updateSucceedsWhileTheCallerHoldsTheLock() {
         Quote existing = existingQuote();
         stubUpdate(existing);
@@ -372,6 +546,30 @@ class QuoteServiceTest {
 
         assertThat(response.lock().heldByCurrentUser()).isTrue();
         assertThat(existing.getUpdatedByUserId()).isEqualTo(7L);
+    }
+
+    @Test
+    void updateKeepsTheStoredQuoteNumber() {
+        Quote existing = existingQuote();
+        stubUpdate(existing);
+        holdLock(7L, LocalDateTime.now());
+
+        quoteService.update(12L, request("2026NC-200", List.of()), 7L);
+
+        assertThat(existing.getQuoteNumber()).isEqualTo("2026NC-100");
+    }
+
+    @Test
+    void updateRejectsADifferentNc() {
+        Quote existing = existingQuote();
+        when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existing));
+        holdLock(7L, LocalDateTime.now());
+
+        assertThatThrownBy(() -> quoteService.update(12L, copyRequestWithNc("2026NC-100", "NC-200", null), 7L))
+                .isInstanceOf(QuoteValidationException.class)
+                .hasMessageContaining("ncNumber");
+        assertThat(existing.getQuoteNumber()).isEqualTo("2026NC-100");
+        assertThat(existing.getNcNumber()).isEqualTo("NC-100");
     }
 
     @Test
@@ -721,6 +919,34 @@ class QuoteServiceTest {
     }
 
     @Test
+    void findAllIncludesCustomerAndReceivedTotal() {
+        Quote existing = existingQuote();
+        existing.setCustId(4L);
+        when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existing));
+        when(lockRepository.findAllByQidIn(List.of(12L))).thenReturn(List.of());
+        when(quoteRepository.sumReceivedTotals(List.of(12L)))
+                .thenReturn(List.<Object[]>of(new Object[] {12L, new BigDecimal("145.50")}));
+
+        var summaries = quoteService.findAll(7L);
+
+        assertThat(summaries.get(0).custId()).isEqualTo(4L);
+        assertThat(summaries.get(0).receivedTotal()).isEqualByComparingTo("145.50");
+    }
+
+    @Test
+    void findAllUsesZeroWhenNoQuantityRowIsReceived() {
+        Quote existing = existingQuote();
+        when(quoteRepository.findAllByIsDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(existing));
+        when(lockRepository.findAllByQidIn(List.of(12L))).thenReturn(List.of());
+        when(quoteRepository.sumReceivedTotals(List.of(12L))).thenReturn(List.<Object[]>of());
+
+        var summaries = quoteService.findAll(7L);
+
+        assertThat(summaries.get(0).custId()).isNull();
+        assertThat(summaries.get(0).receivedTotal()).isEqualByComparingTo("0");
+    }
+
+    @Test
     void findAllIncludesSamsReview() {
         Quote existing = existingQuote();
         existing.setItarc(true);
@@ -751,7 +977,6 @@ class QuoteServiceTest {
 
     private void stubUpdate(Quote existing) {
         when(quoteRepository.findByQidAndIsDeletedFalse(12L)).thenReturn(Optional.of(existing));
-        when(quoteRepository.existsByQuoteNumberIgnoreCaseAndQidNot("2026NC-100", 12L)).thenReturn(false);
         when(quoteRepository.save(existing)).thenReturn(existing);
         stubEmptyHistory();
     }
@@ -797,7 +1022,10 @@ class QuoteServiceTest {
     }
 
     private static Quote existingQuote() {
-        return quoteAt(12L, "2026NC-100");
+        Quote quote = quoteAt(12L, "2026NC-100");
+        quote.setNcId(5L);
+        quote.setNcNumber("NC-100");
+        return quote;
     }
 
     private static Quote quoteAt(Long qid, String quoteNumber) {
@@ -805,6 +1033,18 @@ class QuoteServiceTest {
         quote.setQid(qid);
         quote.setQuoteNumber(quoteNumber);
         quote.setCreateDate(LocalDate.of(2026, 1, 5));
+        quote.setCreatedAt(LocalDateTime.of(2026, 1, 5, 0, 0).plusSeconds(qid));
+        return quote;
+    }
+
+    private static Quote quoteWithNc(String quoteNumber) {
+        return quoteWithNcAt(12L, quoteNumber);
+    }
+
+    private static Quote quoteWithNcAt(Long qid, String quoteNumber) {
+        Quote quote = quoteAt(qid, quoteNumber);
+        quote.setNcId(5L);
+        quote.setNcNumber("NC-100");
         return quote;
     }
 
@@ -883,12 +1123,16 @@ class QuoteServiceTest {
                 base.pcbaPlant(), base.pcbOrigin(), base.status(),
                 reqPnc, dec(pcbWo), dec(pcbaWo), headingPnc,
                 reqAs9102, dec(pcbWith), dec(pcbaWith), headingAs9102,
-                base.quantities()
+                base.quantities(), base.copyFromQid()
         );
     }
 
     private static QuoteRequest request(String quoteNumber, List<QuoteQuantityRequest> quantities) {
-        return request(quoteNumber, quantities, "Open", null, null, "5.00");
+        return request(quoteNumber, quantities, "Open", null, null, "5.00", null);
+    }
+
+    private static QuoteRequest request(String quoteNumber, List<QuoteQuantityRequest> quantities, Long copyFromQid) {
+        return request(quoteNumber, quantities, "Open", null, null, "5.00", copyFromQid);
     }
 
     private static QuoteRequest requestWithStatuses(String assyQuoteStatus, String pcbQuoteStatus) {
@@ -906,22 +1150,42 @@ class QuoteServiceTest {
                 base.pcbaPlant(), base.pcbOrigin(), base.status(),
                 base.faiReqPnc(), base.faiPcbWo(), base.faiPcbaWo(), base.faiHeadingPnc(),
                 base.faiReqAs9102(), base.faiPcbWith(), base.faiPcbaWith(), base.faiHeadingAs9102(),
-                base.quantities()
+                base.quantities(), base.copyFromQid()
+        );
+    }
+
+    /** A copy request pointed at a different NC than the quote it came from. */
+    private static QuoteRequest copyRequestWithNc(String quoteNumber, String ncNumber, Long copyFromQid) {
+        QuoteRequest base = request(quoteNumber, List.of(), copyFromQid);
+        return new QuoteRequest(
+                base.quoteNumber(), base.quoteType(), base.projectNumber(), base.createDate(),
+                base.submitDate(), base.custId(), base.customerName(), base.contId(),
+                base.contactName(), base.customerRfq(), base.ncId(), ncNumber,
+                base.assyNumber(), base.pcbaRevision(), base.pcbNumber(), base.pcbRevision(),
+                base.assyQuoteStatus(), base.pcbQuoteNumber(), base.pcbQuoteStatus(),
+                base.array(), base.commissionPercentage(), base.internalNote1(),
+                base.internalNote2(), base.notesToCustomer(), base.otherNreCharges(),
+                base.receivedDate(), base.pncNotes(), base.laborOnly(), base.partsScheduled(),
+                base.feedback(), base.itarc(), base.berryc(), base.samsReview(),
+                base.pcbaPlant(), base.pcbOrigin(), base.status(),
+                base.faiReqPnc(), base.faiPcbWo(), base.faiPcbaWo(), base.faiHeadingPnc(),
+                base.faiReqAs9102(), base.faiPcbWith(), base.faiPcbaWith(), base.faiHeadingAs9102(),
+                base.quantities(), base.copyFromQid()
         );
     }
 
     private static QuoteRequest withStatus(String status, LocalDate receivedDate) {
-        return request("2026NC-100", List.of(), status, null, receivedDate, "5.00");
+        return request("2026NC-100", List.of(), status, null, receivedDate, "5.00", null);
     }
 
     /** A submitted quote, optionally carrying a submit date already. */
     private static QuoteRequest withSubmitted(LocalDate submitDate) {
-        return request("2026NC-100", List.of(), "Submitted", submitDate, null, "5.00");
+        return request("2026NC-100", List.of(), "Submitted", submitDate, null, "5.00", null);
     }
 
     /** One row and an explicit commission, for the calculation tests. */
     private static QuoteRequest withCommission(String commission, QuoteQuantityRequest row) {
-        return request("2026NC-100", List.of(row), "Open", null, null, commission);
+        return request("2026NC-100", List.of(row), "Open", null, null, commission, null);
     }
 
     private static QuoteRequest request(
@@ -930,7 +1194,8 @@ class QuoteServiceTest {
             String status,
             LocalDate submitDate,
             LocalDate receivedDate,
-            String commission
+            String commission,
+            Long copyFromQid
     ) {
         return new QuoteRequest(
                 quoteNumber,
@@ -971,7 +1236,8 @@ class QuoteServiceTest {
                 null,
                 null,
                 null,
-                quantities
+                quantities,
+                copyFromQid
         );
     }
 }

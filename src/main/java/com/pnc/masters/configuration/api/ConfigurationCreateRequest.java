@@ -14,6 +14,8 @@ public record ConfigurationCreateRequest(
         String configValue,
         @Size(max = 255, message = "description must be at most 255 characters")
         String description,
-        boolean useEditor
+        boolean useEditor,
+        @Pattern(regexp = "text|image", message = "valueType must be either text or image")
+        String valueType
 ) {
 }

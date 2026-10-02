@@ -1,6 +1,7 @@
 package com.pnc.masters.configuration.api;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record ConfigurationUpdateRequest(
@@ -9,6 +10,8 @@ public record ConfigurationUpdateRequest(
         String configValue,
         @Size(max = 255, message = "description must be at most 255 characters")
         String description,
-        boolean useEditor
+        boolean useEditor,
+        @Pattern(regexp = "text|image", message = "valueType must be either text or image")
+        String valueType
 ) {
 }

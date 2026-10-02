@@ -51,7 +51,7 @@ public class ContactService {
 
     @Transactional(readOnly = true)
     public List<ContactResponse> findByCustomerId(Long customerId) {
-        return contactRepository.findByCustomerCustId(customerId).stream().map(this::toResponse).toList();
+        return contactRepository.findByCustomerCustIdOrderByContIdAsc(customerId).stream().map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)

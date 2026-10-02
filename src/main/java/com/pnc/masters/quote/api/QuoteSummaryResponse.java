@@ -1,5 +1,6 @@
 package com.pnc.masters.quote.api;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record QuoteSummaryResponse(
@@ -21,6 +22,8 @@ public record QuoteSummaryResponse(
         boolean berryc,
         boolean samsReview,
         QuoteLockResponse lock,
-        int familySize
+        int familySize,
+        Long custId,
+        BigDecimal receivedTotal
 ) {
 }

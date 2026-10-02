@@ -1,7 +1,9 @@
 package com.pnc.masters.quote.api;
 
 import com.pnc.masters.quote.application.QuoteLockService;
+import com.pnc.masters.quote.application.QuoteReportService;
 import com.pnc.masters.quote.application.QuoteService;
+import com.pnc.masters.quote.application.QuoteTakeoverService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -24,10 +27,17 @@ public class QuoteController {
 
     private final QuoteService quoteService;
     private final QuoteLockService lockService;
+    private final QuoteReportService reportService;
+    private final QuoteTakeoverService takeoverService;
 
-    public QuoteController(QuoteService quoteService, QuoteLockService lockService) {
+    public QuoteController(QuoteService quoteService,
+                           QuoteLockService lockService,
+                           QuoteReportService reportService,
+                           QuoteTakeoverService takeoverService) {
         this.quoteService = quoteService;
         this.lockService = lockService;
+        this.reportService = reportService;
+        this.takeoverService = takeoverService;
     }
 
     @GetMapping
@@ -35,9 +45,23 @@ public class QuoteController {
         return quoteService.findAll(userId(authentication));
     }
 
+    @GetMapping("/report")
+    public List<QuoteReportMonthResponse> report(@RequestParam int year) {
+        return reportService.report(year);
+    }
+
     @GetMapping("/{id}/next-copy-number")
     public QuoteCopyNumberResponse nextCopyNumber(@PathVariable Long id) {
         return quoteService.nextCopyNumber(id);
+    }
+
+    /** Quote# for an NC. {@code qid} is absent while the quote is unsaved. */
+    @GetMapping("/next-number")
+    public QuoteCopyNumberResponse nextNumber(
+            @RequestParam String ncNumber,
+            @RequestParam(required = false) Long qid
+    ) {
+        return quoteService.nextNumberForNc(qid, ncNumber);
     }
 
     @GetMapping("/{id}/family")
@@ -91,6 +115,26 @@ public class QuoteController {
     @DeleteMapping("/{id}/lock/force")
     public ResponseEntity<Void> forceReleaseLock(@PathVariable Long id) {
         lockService.forceRelease(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/lock/takeover")
+    public ResponseEntity<Void> requestTakeover(@PathVariable Long id, Authentication authentication) {
+        takeoverService.request(id, userId(authentication));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/lock/takeover/respond")
+    public ResponseEntity<Void> respondTakeover(@PathVariable Long id,
+                                                @RequestBody TakeoverResponseRequest body,
+                                                Authentication authentication) {
+        takeoverService.respond(id, userId(authentication), body.allow());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/lock/takeover/saved")
+    public ResponseEntity<Void> confirmTakeoverSave(@PathVariable Long id, Authentication authentication) {
+        takeoverService.saved(id, userId(authentication));
         return ResponseEntity.noContent().build();
     }
 

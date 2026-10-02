@@ -24,6 +24,9 @@ public class AppConfiguration {
     @Column(name = "use_editor", nullable = false)
     private boolean useEditor;
 
+    @Column(name = "value_type", length = 16, nullable = false)
+    private String valueType;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
@@ -35,6 +38,8 @@ public class AppConfiguration {
     public void setDescription(String description) { this.description = description; }
     public boolean isUseEditor() { return useEditor; }
     public void setUseEditor(boolean useEditor) { this.useEditor = useEditor; }
+    public String getValueType() { return valueType; }
+    public void setValueType(String valueType) { this.valueType = valueType; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

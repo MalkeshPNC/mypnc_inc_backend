@@ -19,6 +19,7 @@ public record CustomerResponse(
         String billtoAddress,
         String shiptoAddress,
         boolean automailOn,
-        BigDecimal salesPersonDefaultCommission
+        BigDecimal salesPersonDefaultCommission,
+        String contactPerson
 ) {
 }

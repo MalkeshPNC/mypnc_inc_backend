@@ -15,6 +15,8 @@ import java.util.List;
 @Transactional
 public class AppConfigurationService {
 
+    private static final String VALUE_TYPE_TEXT = "text";
+
     private final AppConfigurationRepository repository;
 
     public AppConfigurationService(AppConfigurationRepository repository) {
@@ -33,13 +35,13 @@ public class AppConfigurationService {
         }
         AppConfiguration configuration = new AppConfiguration();
         configuration.setConfigKey(key);
-        applyValue(configuration, request.configValue(), request.description(), request.useEditor());
+        applyValue(configuration, request.configValue(), request.description(), request.useEditor(), request.valueType());
         return toResponse(repository.save(configuration));
     }
 
     public ConfigurationResponse update(String key, ConfigurationUpdateRequest request) {
         AppConfiguration configuration = getConfiguration(key);
-        applyValue(configuration, request.configValue(), request.description(), request.useEditor());
+        applyValue(configuration, request.configValue(), request.description(), request.useEditor(), request.valueType());
         return toResponse(repository.save(configuration));
     }
 
@@ -52,10 +54,11 @@ public class AppConfigurationService {
                 .orElseThrow(() -> new ConfigurationNotFoundException(key));
     }
 
-    private void applyValue(AppConfiguration configuration, String value, String description, boolean useEditor) {
+    private void applyValue(AppConfiguration configuration, String value, String description, boolean useEditor, String valueType) {
         configuration.setConfigValue(value.trim());
         configuration.setDescription(blankToNull(description));
         configuration.setUseEditor(useEditor);
+        configuration.setValueType(valueType == null || valueType.isBlank() ? VALUE_TYPE_TEXT : valueType.trim());
         configuration.setUpdatedAt(LocalDateTime.now());
     }
 
@@ -65,6 +68,7 @@ public class AppConfigurationService {
                 configuration.getConfigValue(),
                 configuration.getDescription(),
                 configuration.isUseEditor(),
+                configuration.getValueType(),
                 configuration.getUpdatedAt());
     }
 

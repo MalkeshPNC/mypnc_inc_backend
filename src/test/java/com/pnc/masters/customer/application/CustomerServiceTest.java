@@ -1,5 +1,7 @@
 package com.pnc.masters.customer.application;
 
+import com.pnc.masters.contact.Contact;
+import com.pnc.masters.contact.ContactRepository;
 import com.pnc.masters.customer.Customer;
 import com.pnc.masters.customer.CustomerRepository;
 import com.pnc.masters.customer.api.CustomerNotFoundException;
@@ -36,6 +38,9 @@ class CustomerServiceTest {
     @Mock
     private SalesPersonRepository salesPersonRepository;
 
+    @Mock
+    private ContactRepository contactRepository;
+
     @InjectMocks
     private CustomerService customerService;
 
@@ -70,6 +75,20 @@ class CustomerServiceTest {
         assertThat(response).extracting(CustomerResponse::customer).containsExactly("Active customer");
         verify(customerRepository).findAllByIsDeletedFalse();
         verify(customerRepository, never()).findAll();
+    }
+
+    @Test
+    void findAllUsesTheFirstContactInListOrder() {
+        Customer active = new Customer();
+        active.setCustId(1L);
+        active.setCustomer("Active customer");
+        when(customerRepository.findAllByIsDeletedFalse()).thenReturn(List.of(active));
+        when(contactRepository.findByCustomerCustIdInOrderByContIdAsc(List.of(1L)))
+                .thenReturn(List.of(contact(3L, active, "Ada", "Lovelace"), contact(8L, active, "Zoe", "Ng")));
+
+        List<CustomerResponse> response = customerService.findAll();
+
+        assertThat(response.get(0).contactPerson()).isEqualTo("Ada Lovelace");
     }
 
     @Test
@@ -142,6 +161,15 @@ class CustomerServiceTest {
             assertThat(captor.getValue().getSalesPersons().get(0).getCommission()).isEqualByComparingTo("15.00");
             verify(salesPersonRepository).findById(eq(5L));
             }
+
+    private static Contact contact(Long contId, Customer customer, String firstName, String lastName) {
+        Contact contact = new Contact();
+        contact.setContId(contId);
+        contact.setCustomer(customer);
+        contact.setFirstName(firstName);
+        contact.setLastName(lastName);
+        return contact;
+    }
 
     private CustomerRequest request(String customer) {
         return new CustomerRequest(

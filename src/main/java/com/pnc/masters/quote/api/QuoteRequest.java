@@ -59,6 +59,8 @@ public record QuoteRequest(
         BigDecimal faiPcbWith,
         BigDecimal faiPcbaWith,
         String faiHeadingAs9102,
-        @Valid List<QuoteQuantityRequest> quantities
+        @Valid List<QuoteQuantityRequest> quantities,
+        /** Set when this create is a copy, so the new row keeps that quote's family key. */
+        Long copyFromQid
 ) {
 }
