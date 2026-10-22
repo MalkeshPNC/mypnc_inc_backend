@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -31,9 +32,16 @@ public class CustomerController {
         return customerService.findAll();
     }
 
+    @GetMapping("/by-name")
+    public CustomerResponse findByName(@RequestParam String name,
+                                       @RequestParam(defaultValue = "false") boolean includeWinRatio) {
+        return customerService.findByName(name, includeWinRatio);
+    }
+
     @GetMapping("/{id}")
-    public CustomerResponse findById(@PathVariable Long id) {
-        return customerService.findById(id);
+    public CustomerResponse findById(@PathVariable Long id,
+                                     @RequestParam(defaultValue = "false") boolean includeWinRatio) {
+        return customerService.findById(id, includeWinRatio);
     }
 
     @PostMapping

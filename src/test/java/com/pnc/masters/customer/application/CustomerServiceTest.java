@@ -8,6 +8,7 @@ import com.pnc.masters.customer.api.CustomerNotFoundException;
 import com.pnc.masters.customer.api.CustomerRequest;
 import com.pnc.masters.customer.api.CustomerSalesPersonRequest;
 import com.pnc.masters.customer.api.CustomerResponse;
+import com.pnc.masters.quote.application.CustomerWinRatio;
 import com.pnc.masters.salesperson.SalesPerson;
 import com.pnc.masters.salesperson.SalesPersonRepository;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ class CustomerServiceTest {
     @Mock
     private ContactRepository contactRepository;
 
+    @Mock
+    private CustomerWinRatio customerWinRatio;
+
     @InjectMocks
     private CustomerService customerService;
 
@@ -68,13 +72,15 @@ class CustomerServiceTest {
         Customer active = new Customer();
         active.setCustId(1L);
         active.setCustomer("Active customer");
-        when(customerRepository.findAllByIsDeletedFalse()).thenReturn(List.of(active));
+        when(customerRepository.findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc()).thenReturn(List.of(active));
 
         List<CustomerResponse> response = customerService.findAll();
 
         assertThat(response).extracting(CustomerResponse::customer).containsExactly("Active customer");
-        verify(customerRepository).findAllByIsDeletedFalse();
+        assertThat(response.get(0).companyBlobLogo()).isNull();
+        verify(customerRepository).findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc();
         verify(customerRepository, never()).findAll();
+        verify(customerRepository, never()).findCompanyBlobLogo(any());
     }
 
     @Test
@@ -82,7 +88,7 @@ class CustomerServiceTest {
         Customer active = new Customer();
         active.setCustId(1L);
         active.setCustomer("Active customer");
-        when(customerRepository.findAllByIsDeletedFalse()).thenReturn(List.of(active));
+        when(customerRepository.findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc()).thenReturn(List.of(active));
         when(contactRepository.findByCustomerCustIdInOrderByContIdAsc(List.of(1L)))
                 .thenReturn(List.of(contact(3L, active, "Ada", "Lovelace"), contact(8L, active, "Zoe", "Ng")));
 
@@ -161,6 +167,89 @@ class CustomerServiceTest {
             assertThat(captor.getValue().getSalesPersons().get(0).getCommission()).isEqualByComparingTo("15.00");
             verify(salesPersonRepository).findById(eq(5L));
             }
+
+    @Test
+    void findByIdKeepsWinRatioOffUnlessTheQuoteFormAsksForIt() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+
+        assertThat(customerService.findById(4L).currentYearWinRatio()).isNull();
+        verify(customerWinRatio, never()).currentYear(any(), any());
+    }
+
+    @Test
+    void findByIdReturnsTheCurrentYearWinRatioWhenRequested() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+        when(customerWinRatio.currentYear(4L, "Acme")).thenReturn(50);
+
+        assertThat(customerService.findById(4L, true).currentYearWinRatio()).isEqualTo(50);
+    }
+
+    @Test
+    void logoBlobIsPreviewOnlyWhenTheLogoFileIsBlank() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+        when(customerRepository.findCompanyBlobLogo(4L)).thenReturn(new byte[] {
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+        });
+
+        CustomerResponse response = customerService.findById(4L);
+
+        assertThat(response.companyLogo()).isNull();
+        assertThat(response.companyBlobLogo()).startsWith("data:image/png;base64,");
+        verify(customerRepository).findCompanyBlobLogo(4L);
+    }
+
+    @Test
+    void logoBlobIsSkippedWhenALogoFileIsAlreadySaved() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        customer.setCompanyLogo("/api/v1/documents/9/content");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+
+        assertThat(customerService.findById(4L).companyBlobLogo()).isNull();
+        verify(customerRepository, never()).findCompanyBlobLogo(4L);
+    }
+
+    @Test
+    void findByNameReturnsTheOnlyActiveMatch() {
+        Customer customer = new Customer();
+        customer.setCustId(8L);
+        customer.setCustomer("Acme");
+        customer.setRemarks("net 30");
+        when(customerRepository.findActiveByName("acme")).thenReturn(List.of(customer));
+        when(contactRepository.findByCustomerCustIdOrderByContIdAsc(8L)).thenReturn(List.of());
+
+        CustomerResponse response = customerService.findByName("  acme  ");
+
+        assertThat(response.custId()).isEqualTo(8L);
+        assertThat(response.customer()).isEqualTo("Acme");
+        assertThat(response.remarks()).isEqualTo("net 30");
+        verify(customerRepository, never()).findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc();
+    }
+
+    @Test
+    void findByNameRejectsAMissingOrSharedName() {
+        when(customerRepository.findActiveByName("Acme")).thenReturn(List.of());
+        assertThatThrownBy(() -> customerService.findByName("Acme"))
+                .isInstanceOf(CustomerNotFoundException.class);
+
+        Customer first = new Customer();
+        first.setCustId(1L);
+        Customer second = new Customer();
+        second.setCustId(2L);
+        when(customerRepository.findActiveByName("Acme")).thenReturn(List.of(first, second));
+        assertThatThrownBy(() -> customerService.findByName("Acme"))
+                .isInstanceOf(CustomerNotFoundException.class);
+    }
 
     private static Contact contact(Long contId, Customer customer, String firstName, String lastName) {
         Contact contact = new Contact();

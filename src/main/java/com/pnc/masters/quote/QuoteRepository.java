@@ -1,6 +1,7 @@
 package com.pnc.masters.quote;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -9,7 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface QuoteRepository extends JpaRepository<Quote, Long> {
+public interface QuoteRepository extends JpaRepository<Quote, Long>, JpaSpecificationExecutor<Quote> {
 
     List<Quote> findAllByIsDeletedFalseOrderByCreatedAtDesc();
 
@@ -66,7 +67,7 @@ public interface QuoteRepository extends JpaRepository<Quote, Long> {
     List<Object[]> sumReceivedTotals(@Param("qids") Collection<Long> qids);
 
     /**
-     * Quotes that can affect a year: created in it, or received in it.
+     * Quotes that can affect a year: submitted in it, or received in it.
      * Quantities come along so the report does not query each quote again.
      */
     @Query("""
@@ -74,9 +75,41 @@ public interface QuoteRepository extends JpaRepository<Quote, Long> {
             LEFT JOIN FETCH q.quantities
             WHERE q.isDeleted = false
               AND (
-                (q.createDate >= :start AND q.createDate < :end)
+                (q.submitDate >= :start AND q.submitDate < :end)
                 OR (q.receivedDate >= :start AND q.receivedDate < :end)
               )
             """)
     List<Quote> findForReport(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
+    /**
+     * Quotes submitted in a date range. Quantities come along so a customer
+     * summary does not query each quote again.
+     */
+    @Query("""
+            SELECT DISTINCT q FROM Quote q
+            LEFT JOIN FETCH q.quantities
+            WHERE q.isDeleted = false
+              AND q.submitDate >= :start
+              AND q.submitDate < :end
+            """)
+    List<Quote> findSubmittedBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
+    /** Submitted quotes in a date range, without quantity rows. */
+    @Query("""
+            SELECT q FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.submitDate >= :start
+              AND q.submitDate < :end
+            """)
+    List<Quote> findSubmittedHeadersBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
+
+    /** How many non-deleted quotes share each NC on the current list page. */
+    @Query("""
+            SELECT LOWER(TRIM(q.ncNumber)), COUNT(q)
+            FROM Quote q
+            WHERE q.isDeleted = false
+              AND LOWER(TRIM(q.ncNumber)) IN :ncNumbers
+            GROUP BY LOWER(TRIM(q.ncNumber))
+            """)
+    List<Object[]> countByNcNumber(@Param("ncNumbers") Collection<String> ncNumbers);
 }

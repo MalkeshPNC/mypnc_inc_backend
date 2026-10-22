@@ -20,6 +20,8 @@ public record CustomerResponse(
         String shiptoAddress,
         boolean automailOn,
         BigDecimal salesPersonDefaultCommission,
-        String contactPerson
+        String contactPerson,
+        String companyBlobLogo,
+        Integer currentYearWinRatio
 ) {
 }

@@ -35,6 +35,11 @@ public class NcMasterController {
         return ncMasterService.findAll();
     }
 
+    @GetMapping("/by-number")
+    public NcMasterResponse findByNumber(@RequestParam String ncNumber) {
+        return ncMasterService.findByNumber(ncNumber);
+    }
+
     @GetMapping("/exists")
     public NcNumberAvailabilityResponse exists(
             @RequestParam String ncNumber,

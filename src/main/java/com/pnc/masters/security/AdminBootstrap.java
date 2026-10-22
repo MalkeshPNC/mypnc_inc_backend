@@ -35,6 +35,7 @@ public class AdminBootstrap implements ApplicationRunner {
             return;
         }
         Role adminRole = roleRepository.findByRoleCodeIgnoreCase(AuthService.ROLE_ADMIN).orElseThrow();
+        Role superAdminRole = roleRepository.findByRoleCodeIgnoreCase(AuthService.ROLE_SUPER_ADMIN).orElseThrow();
         String email = properties.getBootstrapEmail().trim().toLowerCase();
         AppUser admin = userRepository.findByEmailIgnoreCase(email).orElseGet(AppUser::new);
         admin.setEmail(email);
@@ -42,6 +43,7 @@ public class AdminBootstrap implements ApplicationRunner {
         admin.setPasswordHash(passwordEncoder.encode(properties.getBootstrapPassword()));
         admin.setEnabled(true);
         admin.getRoles().add(adminRole);
+        admin.getRoles().add(superAdminRole);
         userRepository.save(admin);
         log.warn("Bootstrap admin created for {}. Change AUTH_BOOTSTRAP_PASSWORD after first login.", email);
     }

@@ -1,5 +1,6 @@
 package com.pnc.masters.ncmaster;
 
+import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcMasterValidationException;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
@@ -140,5 +141,35 @@ class NcMasterServiceTest {
                 2L,
                 new NcMasterRequest("nc-100", null, null, null, null, null, null, null)
         )).isInstanceOf(NcNumberExistsException.class);
+    }
+
+    @Test
+    void findByNumberReturnsThatRecord() {
+        NcMaster record = new NcMaster();
+        record.setNcId(4L);
+        record.setNcNumber("NC-100");
+        record.setPcbaPartNumber("PCBA-1");
+        record.setNotes("keep the rev");
+        record.setCreatedBy("Ada");
+        when(ncMasterRepository.findByNcNumberIgnoreCase("NC-100")).thenReturn(Optional.of(record));
+        PcbaNote note = new PcbaNote();
+        note.setPcbaNotes("watch the pads");
+        when(pcbaNoteRepository.findByPcbaPartNumberIgnoreCase("PCBA-1")).thenReturn(Optional.of(note));
+
+        var response = service.findByNumber(" nc-100 ");
+
+        assertThat(response.ncId()).isEqualTo(4L);
+        assertThat(response.ncNumber()).isEqualTo("NC-100");
+        assertThat(response.notes()).isEqualTo("keep the rev");
+        assertThat(response.pcbaNotes()).isEqualTo("watch the pads");
+        verify(ncMasterRepository, never()).findAllByOrderByCreatedAtDesc();
+    }
+
+    @Test
+    void findByNumberRejectsAnUnknownNumber() {
+        when(ncMasterRepository.findByNcNumberIgnoreCase("NC-404")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findByNumber("nc-404"))
+                .isInstanceOf(NcMasterNotFoundException.class);
     }
 }

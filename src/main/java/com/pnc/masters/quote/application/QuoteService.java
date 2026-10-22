@@ -15,6 +15,7 @@ import com.pnc.masters.quote.api.QuoteHistoryResponse;
 import com.pnc.masters.quote.api.QuoteLockResponse;
 import com.pnc.masters.quote.api.QuoteNotFoundException;
 import com.pnc.masters.quote.api.QuoteNumberExistsException;
+import com.pnc.masters.quote.api.QuotePageResponse;
 import com.pnc.masters.quote.api.QuoteQuantityRequest;
 import com.pnc.masters.quote.api.QuoteQuantityResponse;
 import com.pnc.masters.quote.api.QuoteRequest;
@@ -23,6 +24,12 @@ import com.pnc.masters.quote.api.QuoteSummaryResponse;
 import com.pnc.masters.quote.api.QuoteValidationException;
 import com.pnc.masters.security.AppUser;
 import com.pnc.masters.security.AppUserRepository;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +60,8 @@ public class QuoteService {
 
     /** Stands in for "no quote to leave out" in the number lookups. */
     private static final Long NO_QUOTE = 0L;
+
+    private static final int PAGE_SIZE = 100;
 
     /** The quotestatus entry that means the quote went out to the customer. */
     private static final String SUBMITTED_STATUS = "submitted";
@@ -104,6 +113,83 @@ public class QuoteService {
                         ncSize(quote, ncCounts),
                         receivedTotals.getOrDefault(quote.getQid(), BigDecimal.ZERO)))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public QuotePageResponse page(Long userId, int page, Integer size, String status, String field, String query) {
+        int pageSize = size == null || size < 1 || size > PAGE_SIZE ? PAGE_SIZE : size;
+        int pageIndex = Math.max(page, 0);
+        Page<Quote> result = quoteRepository.findAll(
+                pageSpec(status, field, query),
+                PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("qid")))
+        );
+        List<Quote> quotes = result.getContent();
+        List<Long> qids = quotes.stream().map(Quote::getQid).toList();
+        Map<Long, QuoteLockResponse> locks = lockService.findAll(qids, userId);
+        Map<String, Integer> familySizes = ncCountsForPage(quotes);
+        Map<Long, BigDecimal> received = receivedTotals(qids);
+        List<QuoteSummaryResponse> items = quotes.stream()
+                .map(quote -> toSummary(
+                        quote,
+                        locks.get(quote.getQid()),
+                        ncSize(quote, familySizes),
+                        received.getOrDefault(quote.getQid(), BigDecimal.ZERO)))
+                .toList();
+        return new QuotePageResponse(items, result.getTotalElements(), pageIndex, pageSize);
+    }
+
+    private Map<String, Integer> ncCountsForPage(List<Quote> quotes) {
+        List<String> ncNumbers = quotes.stream()
+                .map(quote -> ncText(quote.getNcNumber()).toLowerCase(Locale.ROOT))
+                .filter(nc -> !nc.isEmpty())
+                .distinct()
+                .toList();
+        if (ncNumbers.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Integer> counts = new HashMap<>();
+        for (Object[] row : quoteRepository.countByNcNumber(ncNumbers)) {
+            if (row[0] instanceof String nc && row[1] instanceof Number count) {
+                counts.put(nc, count.intValue());
+            }
+        }
+        return counts;
+    }
+
+    private static Specification<Quote> pageSpec(String status, String field, String query) {
+        String statusKey = status == null ? "" : status.trim().toLowerCase(Locale.ROOT);
+        String text = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        return (root, criteria, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+            if (!statusKey.isEmpty() && !"all".equals(statusKey)) {
+                predicates.add(cb.equal(cb.lower(cb.trim(root.get("status"))), statusKey));
+            }
+            Expression<String> column = searchColumn(root, field);
+            if (!text.isEmpty() && column != null) {
+                predicates.add(cb.like(cb.lower(column), likePattern(text), '\\'));
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+    }
+
+    private static Expression<String> searchColumn(jakarta.persistence.criteria.Root<Quote> root, String field) {
+        if (field == null) {
+            return null;
+        }
+        return switch (field) {
+            case "qid" -> root.get("qid").as(String.class);
+            case "quoteNumber" -> root.get("quoteNumber");
+            case "projectNumber" -> root.get("projectNumber");
+            case "customerName" -> root.get("customerName");
+            case "assyNumber" -> root.get("assyNumber");
+            case "pcbNumber" -> root.get("pcbNumber");
+            default -> null;
+        };
+    }
+
+    private static String likePattern(String text) {
+        return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
     }
 
     @Transactional(readOnly = true)

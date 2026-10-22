@@ -2,7 +2,7 @@ spring:
   application:
     name: pnc-inc-api
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/sys?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/mypncinc?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:pncroot}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -26,10 +26,22 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
   address: 127.0.0.1
+  tomcat:
+    max-http-form-post-size: 40MB
+    max-swallow-size: 40MB
 
 logging:
   level:
     org.flywaydb: DEBUG
+
+mail:
+  from-address: ${MAIL_FROM:}
+  from-name: ${MAIL_FROM_NAME:PNC Inc}
+  smtp-host: ${MAIL_HOST:}
+  smtp-port: ${MAIL_PORT:587}
+  smtp-username: ${MAIL_USERNAME:}
+  smtp-password: ${MAIL_PASSWORD:}
+  smtp-starttls: ${MAIL_STARTTLS:true}
 
 document:
   max-file-size: ${DOCUMENT_MAX_FILE_SIZE:10485760}

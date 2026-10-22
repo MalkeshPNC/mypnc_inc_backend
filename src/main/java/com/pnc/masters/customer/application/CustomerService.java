@@ -10,12 +10,14 @@ import com.pnc.masters.customer.api.CustomerRequest;
 import com.pnc.masters.customer.api.CustomerResponse;
 import com.pnc.masters.customer.api.CustomerSalesPersonRequest;
 import com.pnc.masters.customer.api.CustomerNotFoundException;
+import com.pnc.masters.quote.application.CustomerWinRatio;
 import com.pnc.masters.salesperson.SalesPerson;
 import com.pnc.masters.salesperson.SalesPersonRepository;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,18 +31,21 @@ public class CustomerService {
     private final CustomerRepository customerRepository;
     private final SalesPersonRepository salesPersonRepository;
     private final ContactRepository contactRepository;
+    private final CustomerWinRatio customerWinRatio;
 
     public CustomerService(CustomerRepository customerRepository,
                            SalesPersonRepository salesPersonRepository,
-                           ContactRepository contactRepository) {
+                           ContactRepository contactRepository,
+                           CustomerWinRatio customerWinRatio) {
         this.customerRepository = customerRepository;
         this.salesPersonRepository = salesPersonRepository;
         this.contactRepository = contactRepository;
+        this.customerWinRatio = customerWinRatio;
     }
 
     @Transactional(readOnly = true)
     public List<CustomerResponse> findAll() {
-        List<Customer> customers = customerRepository.findAllByIsDeletedFalse();
+        List<Customer> customers = customerRepository.findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc();
         Map<Long, String> firstContacts = firstContactNames(customers.stream().map(Customer::getCustId).toList());
         return customers.stream()
                 .map(customer -> toResponse(customer, firstContacts.get(customer.getCustId())))
@@ -49,22 +54,50 @@ public class CustomerService {
 
     @Transactional(readOnly = true)
     public CustomerResponse findById(Long id) {
+        return findById(id, false);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerResponse findById(Long id, boolean includeWinRatio) {
         Customer customer = getCustomer(id);
-        return toResponse(customer, firstContactName(customer.getCustId()));
+        return toResponse(customer, firstContactName(customer.getCustId()), true, includeWinRatio);
+    }
+
+    /**
+     * One active customer for an open quote that has a name and no cust id.
+     * Several customers with that name are left unresolved.
+     */
+    @Transactional(readOnly = true)
+    public CustomerResponse findByName(String name) {
+        return findByName(name, false);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerResponse findByName(String name, boolean includeWinRatio) {
+        String normalized = name == null ? "" : name.trim();
+        if (normalized.isEmpty()) {
+            throw new CustomerNotFoundException(normalized);
+        }
+        List<Customer> matches = customerRepository.findActiveByName(normalized);
+        if (matches.size() != 1) {
+            throw new CustomerNotFoundException(normalized);
+        }
+        Customer customer = matches.get(0);
+        return toResponse(customer, firstContactName(customer.getCustId()), true, includeWinRatio);
     }
 
     public CustomerResponse create(CustomerRequest request) {
         Customer customer = new Customer();
         applyRequest(customer, request);
         Customer saved = customerRepository.save(customer);
-        return toResponse(saved, firstContactName(saved.getCustId()));
+        return toResponse(saved, firstContactName(saved.getCustId()), true);
     }
 
     public CustomerResponse update(Long id, CustomerRequest request) {
         Customer customer = getCustomer(id);
         applyRequest(customer, request);
         Customer saved = customerRepository.save(customer);
-        return toResponse(saved, firstContactName(saved.getCustId()));
+        return toResponse(saved, firstContactName(saved.getCustId()), true);
     }
 
     public void delete(Long id) {
@@ -185,6 +218,14 @@ public class CustomerService {
     }
 
     private CustomerResponse toResponse(Customer customer, String contactPerson) {
+        return toResponse(customer, contactPerson, false);
+    }
+
+    private CustomerResponse toResponse(Customer customer, String contactPerson, boolean includeBlobLogo) {
+        return toResponse(customer, contactPerson, includeBlobLogo, false);
+    }
+
+    private CustomerResponse toResponse(Customer customer, String contactPerson, boolean includeBlobLogo, boolean includeWinRatio) {
         return new CustomerResponse(
                 customer.getCustId(),
                 customer.getCustomer(),
@@ -206,7 +247,20 @@ public class CustomerService {
                 customer.getShiptoAddress(),
                 customer.isAutomailOn(),
                 customer.getSalesPersonDefaultCommission(),
-                contactPerson
+                contactPerson,
+                includeBlobLogo ? blobPreview(customer) : null,
+                includeWinRatio ? customerWinRatio.currentYear(customer.getCustId(), customer.getCustomer()) : null
         );
+    }
+
+    /** Data URL for preview and the quote PDF. Omitted when a saved logo file already exists. */
+    private String blobPreview(Customer customer) {
+        if (notBlank(customer.getCompanyLogo())) {
+            return null;
+        }
+        return CompanyLogoBlob.decode(customerRepository.findCompanyBlobLogo(customer.getCustId()))
+                .map(image -> "data:" + image.mediaType() + ";base64,"
+                        + Base64.getEncoder().encodeToString(image.bytes()))
+                .orElse(null);
     }
 }

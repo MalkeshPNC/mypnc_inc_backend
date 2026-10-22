@@ -43,6 +43,20 @@ public class NcMasterService {
                 .toList();
     }
 
+    /** One NC for an open quote, looked up by the number stored on that quote. */
+    @Transactional(readOnly = true)
+    public NcMasterResponse findByNumber(String ncNumber) {
+        String normalized = normalizeNumber(ncNumber == null ? "" : ncNumber);
+        NcMaster record = ncMasterRepository.findByNcNumberIgnoreCase(normalized)
+                .orElseThrow(() -> new NcMasterNotFoundException(normalized));
+        String pcbaNotes = record.getPcbaPartNumber() == null
+                ? null
+                : pcbaNoteRepository.findByPcbaPartNumberIgnoreCase(record.getPcbaPartNumber())
+                        .map(PcbaNote::getPcbaNotes)
+                        .orElse(null);
+        return toResponse(record, pcbaNotes);
+    }
+
     /**
      * Live duplicate check for the NC form, so concurrent editors see a collision
      * before they submit rather than getting a conflict from {@link #create}.

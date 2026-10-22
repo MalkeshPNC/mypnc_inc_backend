@@ -26,6 +26,8 @@ import com.pnc.masters.salesperson.api.SalesPersonInUseException;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import com.pnc.masters.security.api.DuplicateEmailException;
 import com.pnc.masters.security.api.InvalidCredentialsException;
+import com.pnc.masters.security.api.ModuleConflictException;
+import com.pnc.masters.security.api.ModuleNotFoundException;
 import com.pnc.masters.security.api.InvalidResetTokenException;
 import com.pnc.masters.security.api.RoleConflictException;
 import com.pnc.masters.security.api.RoleNotFoundException;
@@ -35,6 +37,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -181,6 +185,16 @@ public class ApiExceptionHandler {
         return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
     }
 
+    @ExceptionHandler(ModuleNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleModuleNotFound(ModuleNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ModuleConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleModuleConflict(ModuleConflictException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
     @ExceptionHandler(ChatConversationNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleChatConversationNotFound(ChatConversationNotFoundException exception) {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
@@ -204,6 +218,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ChatRateLimitedException.class)
     public ResponseEntity<Map<String, Object>> handleChatRateLimited(ChatRateLimitedException exception) {
         return response(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleUploadTooLarge(MaxUploadSizeExceededException exception) {
+        return response(HttpStatus.PAYLOAD_TOO_LARGE, "The file is larger than 10 MB.", Map.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

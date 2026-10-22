@@ -10,6 +10,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -24,10 +25,16 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ModuleAccessFilter moduleAccessFilter;
     private final AppOriginProperties origins;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, AppOriginProperties origins) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            ModuleAccessFilter moduleAccessFilter,
+            AppOriginProperties origins
+    ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.moduleAccessFilter = moduleAccessFilter;
         this.origins = origins;
     }
 
@@ -58,20 +65,18 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/configurations", "/api/v1/configurations/**").authenticated()
-                        .requestMatchers("/api/v1/configurations", "/api/v1/configurations/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/roles", "/api/v1/roles/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/users", "/api/v1/users/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/quotes/report").hasRole("ADMIN")
-                        // Lock release is a DELETE too, so it has to be matched before the admin-only quote delete.
-                        .requestMatchers(HttpMethod.POST, "/api/v1/quotes/*/lock/takeover").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/quotes/*/lock/force").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/quotes/*/lock").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/quotes/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(moduleAccessFilter, JwtAuthenticationFilter.class);
         return http.build();
+    }
+
+    @Bean
+    FilterRegistrationBean<ModuleAccessFilter> moduleAccessFilterRegistration(ModuleAccessFilter filter) {
+        FilterRegistrationBean<ModuleAccessFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean

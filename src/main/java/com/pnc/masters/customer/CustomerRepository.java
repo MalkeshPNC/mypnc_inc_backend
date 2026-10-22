@@ -12,7 +12,20 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
 	List<Customer> findAllByIsDeletedFalse();
 
+	List<Customer> findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc();
+
 	Optional<Customer> findByCustIdAndIsDeletedFalse(Long custId);
+
+	@Query(value = "SELECT company_blob_logo FROM tblcustomers WHERE cust_id = :id", nativeQuery = true)
+	byte[] findCompanyBlobLogo(@Param("id") Long id);
+
+	@Query("""
+			SELECT c FROM Customer c
+			WHERE c.isDeleted = false
+			  AND LOWER(TRIM(c.customer)) = LOWER(TRIM(:name))
+			ORDER BY c.custId ASC
+			""")
+	List<Customer> findActiveByName(@Param("name") String name);
 
 	@Query("""
 			SELECT c FROM Customer c

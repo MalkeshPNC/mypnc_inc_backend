@@ -41,13 +41,33 @@ public class QuoteController {
     }
 
     @GetMapping
-    public List<QuoteSummaryResponse> findAll(Authentication authentication) {
-        return quoteService.findAll(userId(authentication));
+    public Object findAll(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String field,
+            @RequestParam(required = false) String q,
+            Authentication authentication
+    ) {
+        if (page == null) {
+            return quoteService.findAll(userId(authentication));
+        }
+        return quoteService.page(userId(authentication), page, size, status, field, q);
     }
 
     @GetMapping("/report")
     public List<QuoteReportMonthResponse> report(@RequestParam int year) {
         return reportService.report(year);
+    }
+
+    @GetMapping("/customer-summary")
+    public List<CustomerQuoteYearResponse> customerSummary(@RequestParam Long custId) {
+        return reportService.customerSummary(custId);
+    }
+
+    @GetMapping("/referred-summary")
+    public List<ReferredQuoteSummaryResponse> referredSummary() {
+        return reportService.referredSummary();
     }
 
     @GetMapping("/{id}/next-copy-number")

@@ -1,5 +1,7 @@
 package com.pnc.masters.security;
 
+import com.pnc.masters.security.api.RoleAccessResponse;
+import com.pnc.masters.security.api.RoleAccessUpdateRequest;
 import com.pnc.masters.security.api.RoleRequest;
 import com.pnc.masters.security.api.RoleResponse;
 import jakarta.validation.Valid;
@@ -22,9 +24,11 @@ import java.util.List;
 public class RoleController {
 
     private final RoleService roleService;
+    private final ModuleAccessService moduleAccessService;
 
-    public RoleController(RoleService roleService) {
+    public RoleController(RoleService roleService, ModuleAccessService moduleAccessService) {
         this.roleService = roleService;
+        this.moduleAccessService = moduleAccessService;
     }
 
     @GetMapping
@@ -49,5 +53,18 @@ public class RoleController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         roleService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/access")
+    public List<RoleAccessResponse> access(@PathVariable Long id) {
+        return moduleAccessService.accessFor(id);
+    }
+
+    @PutMapping("/{id}/access")
+    public List<RoleAccessResponse> replaceAccess(
+            @PathVariable Long id,
+            @Valid @RequestBody RoleAccessUpdateRequest request
+    ) {
+        return moduleAccessService.replaceAccess(id, request);
     }
 }

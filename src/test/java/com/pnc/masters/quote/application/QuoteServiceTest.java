@@ -27,6 +27,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -407,6 +411,22 @@ class QuoteServiceTest {
 
         assertThat(summaries).extracting(summary -> summary.familySize())
                 .containsExactly(2, 2, 1);
+    }
+
+    @Test
+    void pageUsesTheNcCountForRowsOnThatPage() {
+        Quote quote = existingQuote();
+        when(quoteRepository.findAll(org.mockito.ArgumentMatchers.<Specification<Quote>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(quote), PageRequest.of(0, 100), 1));
+        when(quoteRepository.countByNcNumber(List.of("nc-100"))).thenReturn(List.<Object[]>of(new Object[] {"nc-100", 4L}));
+        when(quoteRepository.sumReceivedTotals(List.of(12L))).thenReturn(List.of());
+        when(lockRepository.findAllByQidIn(List.of(12L))).thenReturn(List.of());
+
+        var page = quoteService.page(7L, 0, 100, "open", "quoteNumber", "NC-100");
+
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().get(0).familySize()).isEqualTo(4);
     }
 
     @Test
