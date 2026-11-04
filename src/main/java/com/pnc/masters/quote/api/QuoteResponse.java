@@ -58,6 +58,8 @@ public record QuoteResponse(
         List<QuoteQuantityResponse> quantities,
         List<QuoteHistoryResponse> history,
         QuoteLockResponse lock,
-        int familySize
+        int familySize,
+        List<String> attachmentCategories,
+        List<QuoteContactResponse> contacts
 ) {
 }

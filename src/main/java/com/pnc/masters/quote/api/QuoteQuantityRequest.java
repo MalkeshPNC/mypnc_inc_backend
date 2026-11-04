@@ -1,5 +1,7 @@
 package com.pnc.masters.quote.api;
 
+import jakarta.validation.constraints.Digits;
+
 import java.math.BigDecimal;
 
 /**
@@ -27,6 +29,8 @@ public record QuoteQuantityRequest(
         BigDecimal stencil,
         BigDecimal otherNre,
         String comments,
-        Boolean received
+        Boolean received,
+        @Digits(integer = 4, fraction = 2, message = "commissionPercentage must have up to 4 integer digits and 2 decimals")
+        BigDecimal commissionPercentage
 ) {
 }

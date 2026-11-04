@@ -101,6 +101,69 @@ class SubConfigurationServiceTest {
     }
 
     @Test
+    void updateTypeKeepsTheCodeAndAddsAColumn() {
+        SubConfigType type = new SubConfigType();
+        type.setTypeId(3L);
+        type.setTypeCode("group-types");
+        type.setTypeName("Group Types");
+        type.setFieldLabel(1, "Name");
+        SubConfigEntry entry = new SubConfigEntry();
+        entry.setEntryId(11L);
+        entry.setType(type);
+        entry.setFieldValue(1, "Shift");
+        entry.setCreatedBy("Ada");
+        when(typeRepository.findById(3L)).thenReturn(Optional.of(type));
+        when(typeRepository.save(any(SubConfigType.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(entryRepository.findByTypeTypeIdOrderByCreatedAtDesc(3L)).thenReturn(List.of(entry));
+
+        var response = service.updateType(3L, new SubConfigurationTypeRequest(
+                "ignored",
+                "Group Types",
+                List.of("Name", "Code")
+        ));
+
+        assertThat(response.typeCode()).isEqualTo("group-types");
+        assertThat(response.fieldLabels()).containsExactly("Name", "Code");
+        assertThat(response.entries().getFirst().values()).containsExactly("Shift", null);
+    }
+
+    @Test
+    void updateTypeKeepsExistingColumns() {
+        SubConfigType type = new SubConfigType();
+        type.setTypeId(3L);
+        type.setFieldLabel(1, "Name");
+        type.setFieldLabel(2, "Code");
+        when(typeRepository.findById(3L)).thenReturn(Optional.of(type));
+
+        assertThatThrownBy(() -> service.updateType(3L, new SubConfigurationTypeRequest(
+                "group-types",
+                "Group Types",
+                List.of("Name")
+        ))).isInstanceOf(SubConfigurationValidationException.class)
+                .hasMessage("Keep the columns that already exist. You can add a new one.");
+    }
+
+    @Test
+    void updateEntryReplacesValues() {
+        SubConfigType type = new SubConfigType();
+        type.setTypeId(3L);
+        type.setFieldLabel(1, "Name");
+        SubConfigEntry entry = new SubConfigEntry();
+        entry.setEntryId(11L);
+        entry.setType(type);
+        entry.setFieldValue(1, "Shift");
+        entry.setCreatedBy("Ada");
+        when(typeRepository.findById(3L)).thenReturn(Optional.of(type));
+        when(entryRepository.findById(11L)).thenReturn(Optional.of(entry));
+        when(entryRepository.save(any(SubConfigEntry.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.updateEntry(3L, 11L, new SubConfigurationEntryRequest(List.of("Line")));
+
+        assertThat(response.values()).containsExactly("Line");
+        assertThat(entry.getCreatedBy()).isEqualTo("Ada");
+    }
+
+    @Test
     void createEntryRejectsWrongValueCount() {
         SubConfigType type = new SubConfigType();
         type.setTypeId(3L);

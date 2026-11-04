@@ -41,6 +41,9 @@ class ModuleAccessPolicyTest {
         assertEquals(AccessDecision.superAdmin(), ModuleAccessPolicy.decide("GET", "/api/v1/quotes/customer-summary"));
         assertEquals(module("SECURITY", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/roles"));
         assertEquals(module("SECURITY", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/users/2"));
+        assertEquals(module("SECURITY", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/employee-groups"));
+        assertEquals(module("SECURITY", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/employee-groups"));
+        assertEquals(module("SECURITY", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("DELETE", "/api/v1/employee-groups/4"));
     }
 
     @Test
@@ -49,6 +52,14 @@ class ModuleAccessPolicyTest {
         assertEquals(AccessDecision.Kind.ANY_MODULE, lookup.kind());
         assertEquals(ModuleAccessLevel.READ, lookup.level());
         assertEquals(module("CUSTOMERS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/customers"));
+        assertEquals(module("TASKS", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/tasks"));
+        assertEquals(module("TASKS", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("POST", "/api/v1/tasks/4/progress"));
+        assertEquals(module("TASKS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/tasks"));
+        assertEquals(module("TASKS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/tasks/4"));
+        assertEquals(module("DEVELOPMENT_TRACK", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/development-track"));
+        assertEquals(module("DEVELOPMENT_TRACK", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/development-track/4/files/2"));
+        assertEquals(module("DEVELOPMENT_TRACK", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/development-track"));
+        assertEquals(module("DEVELOPMENT_TRACK", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/development-track/4/comments"));
         assertEquals(AccessDecision.open(), ModuleAccessPolicy.decide("GET", "/api/v1/documents/10/content"));
     }
 

@@ -5,15 +5,20 @@ import com.pnc.masters.contact.ContactRepository;
 import com.pnc.masters.ncmaster.NcMaster;
 import com.pnc.masters.ncmaster.NcMasterRepository;
 import com.pnc.masters.quote.Quote;
+import com.pnc.masters.quote.QuoteAttachmentRepository;
+import com.pnc.masters.quote.QuoteContact;
 import com.pnc.masters.quote.QuoteHistory;
 import com.pnc.masters.quote.QuoteHistoryRepository;
 import com.pnc.masters.quote.QuoteQuantity;
 import com.pnc.masters.quote.QuoteRepository;
+import com.pnc.masters.quote.api.QuoteContactRequest;
+import com.pnc.masters.quote.api.QuoteContactResponse;
 import com.pnc.masters.quote.api.QuoteCopyNumberResponse;
 import com.pnc.masters.quote.api.QuoteFamilyResponse;
 import com.pnc.masters.quote.api.QuoteHistoryResponse;
 import com.pnc.masters.quote.api.QuoteLockResponse;
 import com.pnc.masters.quote.api.QuoteNotFoundException;
+import com.pnc.masters.quote.api.QuoteNcChangeRequest;
 import com.pnc.masters.quote.api.QuoteNumberExistsException;
 import com.pnc.masters.quote.api.QuotePageResponse;
 import com.pnc.masters.quote.api.QuoteQuantityRequest;
@@ -43,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -81,6 +87,7 @@ public class QuoteService {
     private final AppUserRepository userRepository;
     private final NcMasterRepository ncMasterRepository;
     private final ContactRepository contactRepository;
+    private final QuoteAttachmentRepository attachmentRepository;
     private final Clock clock;
 
     public QuoteService(QuoteRepository quoteRepository,
@@ -89,6 +96,7 @@ public class QuoteService {
                         AppUserRepository userRepository,
                         NcMasterRepository ncMasterRepository,
                         ContactRepository contactRepository,
+                        QuoteAttachmentRepository attachmentRepository,
                         Clock clock) {
         this.quoteRepository = quoteRepository;
         this.historyRepository = historyRepository;
@@ -96,6 +104,7 @@ public class QuoteService {
         this.userRepository = userRepository;
         this.ncMasterRepository = ncMasterRepository;
         this.contactRepository = contactRepository;
+        this.attachmentRepository = attachmentRepository;
         this.clock = clock;
     }
 
@@ -184,6 +193,8 @@ public class QuoteService {
             case "customerName" -> root.get("customerName");
             case "assyNumber" -> root.get("assyNumber");
             case "pcbNumber" -> root.get("pcbNumber");
+            case "assyQuotePerson" -> root.get("assyQuotePerson");
+            case "pcbQuotePerson" -> root.get("pcbQuotePerson");
             default -> null;
         };
     }
@@ -229,7 +240,7 @@ public class QuoteService {
         if (nc.isEmpty()) {
             throw new QuoteValidationException("ncNumber is required");
         }
-        return numberForNc(nc);
+        return numberForNc(nc, NO_QUOTE);
     }
 
     /**
@@ -245,18 +256,20 @@ public class QuoteService {
         if (qid != null) {
             return new QuoteCopyNumberResponse(getQuote(qid).getQuoteNumber());
         }
-        return numberForNc(ncNumber);
+        return numberForNc(ncNumber, NO_QUOTE);
     }
 
     /**
      * Current year plus the NC. No saved quote for that NC stays unsuffixed.
      * Otherwise the suffix is one more than the highest {@code .n} in any year.
      * A number with no suffix counts as revision 0. Gaps are not filled.
+     * {@code excludeQid} is left out of the count so a quote being renumbered
+     * does not collide with itself.
      */
-    private QuoteCopyNumberResponse numberForNc(String ncNumber) {
+    private QuoteCopyNumberResponse numberForNc(String ncNumber, Long excludeQid) {
         String nc = ncNumber.trim().toUpperCase(Locale.ROOT);
         String base = Year.now(clock).getValue() + nc;
-        List<String> numbers = quoteRepository.findQuoteNumbersForNc(nc, likeLiteral(nc), NO_QUOTE);
+        List<String> numbers = quoteRepository.findQuoteNumbersForNc(nc, likeLiteral(nc), excludeQid);
         if (numbers.isEmpty()) {
             return new QuoteCopyNumberResponse(base);
         }
@@ -297,7 +310,6 @@ public class QuoteService {
         Quote quote = new Quote();
         applyRequest(quote, request, quoteNumber);
         seedBlankFieldsFromNc(quote);
-        stampQuotePersonsIfStatusChanged(quote, request, user, null, null);
         quote.setCreatedByUserId(userId);
         Quote saved = quoteRepository.save(quote);
         List<QuoteQuantityRequest> rows = request.quantities();
@@ -312,16 +324,14 @@ public class QuoteService {
     public QuoteResponse update(Long id, QuoteRequest request, Long userId) {
         Quote quote = getQuote(id);
         lockService.requireHeldBy(id, userId);
+        requirePNotes(id, request);
         requireUnchangedNc(quote, request);
         String quoteNumber = quote.getQuoteNumber();
         AppUser user = userRepository.findById(userId).orElse(null);
-        String previousAqStatus = quote.getAssyQuoteStatus();
-        String previousPqStatus = quote.getPcbQuoteStatus();
         LocalDate createDate = quote.getCreateDate();
         List<Object> headerBefore = headerSignature(quote);
         List<List<Object>> quantitiesBefore = quantitySignature(quote);
         applyRequest(quote, request, quoteNumber);
-        stampQuotePersonsIfStatusChanged(quote, request, user, previousAqStatus, previousPqStatus);
         // Create date is role-gated in the UI, so hold the line here rather than
         // trusting whatever the client posted.
         if (!mayEditCreateDate(user)) {
@@ -333,6 +343,54 @@ public class QuoteService {
         Quote saved = quoteRepository.save(quote);
         recordHistory(saved, QuoteHistory.ACTION_UPDATED, userId, user,
                 describeChanges(headerBefore, quantitiesBefore, saved));
+        return toResponse(saved, userId, true);
+    }
+
+    /**
+     * Points a saved quote at another NC master and copies that NC's part numbers
+     * onto the quote. Quote# is the next number for the new NC. Quantities, status,
+     * and dates other than the update stamp stay as they are. A normal update
+     * still rejects an NC change.
+     */
+    public QuoteResponse changeNc(Long id, QuoteNcChangeRequest request, Long userId) {
+        if (request == null || request.ncId() == null) {
+            throw new QuoteValidationException("ncId is required");
+        }
+        Quote quote = getQuote(id);
+        lockService.requireHeldBy(id, userId);
+        NcMaster nc = ncMasterRepository.findById(request.ncId())
+                .orElseThrow(() -> new QuoteValidationException("NC was not found"));
+        String nextNumber = ncText(nc.getNcNumber());
+        if (nextNumber.isEmpty()) {
+            throw new QuoteValidationException("ncNumber is required");
+        }
+        String previous = ncText(quote.getNcNumber());
+        if (sameId(quote.getNcId(), nc.getNcId()) && sameNc(previous, nextNumber)) {
+            return toResponse(quote, userId, true);
+        }
+        String previousQuoteNumber = ncText(quote.getQuoteNumber());
+        String quoteNumber = numberForNc(nextNumber, quote.getQid()).quoteNumber();
+        if (quoteRepository.existsByQuoteNumberIgnoreCaseAndQidNot(quoteNumber, quote.getQid())) {
+            throw new QuoteNumberExistsException(quoteNumber);
+        }
+        quote.setNcId(nc.getNcId());
+        quote.setNcNumber(nextNumber);
+        quote.setQuoteNumber(quoteNumber);
+        quote.setAssyNumber(blankToNull(nc.getPcbaPartNumber()));
+        quote.setPcbaRevision(blankToNull(nc.getPcbaRev()));
+        quote.setPcbNumber(blankToNull(nc.getPcbPartNumber()));
+        quote.setPcbRevision(blankToNull(nc.getPcbRev()));
+        quote.setUpdatedByUserId(userId);
+        quote.setUpdatedAt(LocalDateTime.now());
+        Quote saved = quoteRepository.save(quote);
+        AppUser user = userRepository.findById(userId).orElse(null);
+        String from = previous.isEmpty() ? "—" : previous;
+        String summary = "NC# " + from + " → " + nextNumber;
+        if (!previousQuoteNumber.equalsIgnoreCase(quoteNumber)) {
+            String oldNumber = previousQuoteNumber.isEmpty() ? "—" : previousQuoteNumber;
+            summary += ". Quote# " + oldNumber + " → " + quoteNumber;
+        }
+        recordHistory(saved, QuoteHistory.ACTION_UPDATED, userId, user, summary);
         return toResponse(saved, userId, true);
     }
 
@@ -366,6 +424,16 @@ public class QuoteService {
 
     private static String ncText(String ncNumber) {
         return ncNumber == null ? "" : ncNumber.trim();
+    }
+
+    private void requirePNotes(Long qid, QuoteRequest request) {
+        if (!isTrue(request.pncNotes()) && !isTrue(request.laborOnly())) {
+            return;
+        }
+        if (!attachmentRepository.existsByQidAndCategory(qid, QuoteAttachmentService.P_NOTES)) {
+            throw new QuoteValidationException(
+                    "Upload a p_notes document before turning on PNC Notes or Labor Only.");
+        }
     }
 
     private static void requireUnchangedNc(Quote quote, QuoteRequest request) {
@@ -421,8 +489,7 @@ public class QuoteService {
         }
         quote.setCustId(request.custId());
         quote.setCustomerName(blankToNull(request.customerName()));
-        quote.setContId(request.contId());
-        quote.setContactName(resolveContactName(request.contId(), request.contactName()));
+        applyContacts(quote, request);
         quote.setCustomerRfq(blankToNull(request.customerRfq()));
         quote.setNcId(request.ncId());
         quote.setNcNumber(blankToNull(request.ncNumber()));
@@ -433,6 +500,7 @@ public class QuoteService {
         quote.setAssyQuoteStatus(blankToNull(request.assyQuoteStatus()));
         quote.setPcbQuoteNumber(blankToNull(request.pcbQuoteNumber()));
         quote.setPcbQuoteStatus(blankToNull(request.pcbQuoteStatus()));
+        applyQuotePersons(quote, request);
         quote.setQuoteArray(blankToNull(request.array()));
         quote.setCommissionPercentage(request.commissionPercentage());
         quote.setInternalNote1(blankToNull(request.internalNote1()));
@@ -484,18 +552,14 @@ public class QuoteService {
     }
 
     /**
-     * Each person column is stamped only when its matching status actually
-     * moved. Empty and null count as the same status so a first save of a
-     * blank field does not overwrite a stored name.
+     * A null person leaves the stored name. A blank value clears it.
      */
-    private void stampQuotePersonsIfStatusChanged(
-            Quote quote, QuoteRequest request, AppUser user, String previousAq, String previousPq) {
-        String personName = displayName(user);
-        if (!sameQuoteStatus(previousAq, request.assyQuoteStatus())) {
-            quote.setAssyQuotePerson(personName);
+    private static void applyQuotePersons(Quote quote, QuoteRequest request) {
+        if (request.assyQuotePerson() != null) {
+            quote.setAssyQuotePerson(blankToNull(request.assyQuotePerson()));
         }
-        if (!sameQuoteStatus(previousPq, request.pcbQuoteStatus())) {
-            quote.setPcbQuotePerson(personName);
+        if (request.pcbQuotePerson() != null) {
+            quote.setPcbQuotePerson(blankToNull(request.pcbQuotePerson()));
         }
     }
 
@@ -523,21 +587,20 @@ public class QuoteService {
                 .toList();
         quote.getQuantities().removeIf(quantity -> !keptIds.contains(quantity.getQtyId()));
 
-        BigDecimal commission = quote.getCommissionPercentage();
         for (QuoteQuantityRequest row : rows) {
             boolean isNew = row.qtyId() == null || row.qtyId() <= 0;
             QuoteQuantity quantity = isNew ? null : existing.get(row.qtyId());
             if (quantity == null) {
                 quantity = new QuoteQuantity();
-                applyQuantity(quantity, row, commission);
+                applyQuantity(quantity, row);
                 quote.addQuantity(quantity);
             } else {
-                applyQuantity(quantity, row, commission);
+                applyQuantity(quantity, row);
             }
         }
     }
 
-    private void applyQuantity(QuoteQuantity quantity, QuoteQuantityRequest row, BigDecimal commission) {
+    private void applyQuantity(QuoteQuantity quantity, QuoteQuantityRequest row) {
         quantity.setLt(blankToNull(row.lt()));
         quantity.setLtPcb(row.ltPcb());
         quantity.setLtPcba(row.ltPcba());
@@ -551,6 +614,7 @@ public class QuoteService {
         quantity.setConfCoat(row.confCoat());
         quantity.setServiceName(blankToNull(row.serviceName()));
         quantity.setServiceCharge(row.serviceCharge());
+        quantity.setCommissionPercentage(row.commissionPercentage());
         quantity.setPcbNre(row.pcbNre());
         quantity.setAssyNre(row.assyNre());
         quantity.setStencil(row.stencil());
@@ -559,14 +623,15 @@ public class QuoteService {
         quantity.setReceived(isTrue(row.received()));
         // subTotal, totalSalesPct and total are derived, so whatever the client
         // posted for them is discarded in favour of the numbers below.
-        recalculate(quantity, commission);
+        recalculate(quantity);
     }
 
     /**
      * Fills in the three derived amounts. Each one is rounded before it feeds the
      * next, so the figures on screen add up when someone checks them by hand.
+     * The row's own commission percentage is what lifts the sub total.
      */
-    private static void recalculate(QuoteQuantity quantity, BigDecimal commission) {
+    private static void recalculate(QuoteQuantity quantity) {
         BigDecimal partsNet = plusPercent(quantity.getPartsCost(), quantity.getPartMarkup());
         BigDecimal laborNet = plusPercent(quantity.getLaborCost(), negate(quantity.getLaborDiscount()));
         BigDecimal subTotal = money(zeroIfNull(quantity.getPcbCost())
@@ -575,7 +640,7 @@ public class QuoteService {
                 .add(zeroIfNull(quantity.getTesting()))
                 .add(zeroIfNull(quantity.getConfCoat()))
                 .add(zeroIfNull(quantity.getServiceCharge())));
-        BigDecimal totalSalesPct = money(plusPercent(subTotal, commission));
+        BigDecimal totalSalesPct = money(plusPercent(subTotal, quantity.getCommissionPercentage()));
         BigDecimal total = money(totalSalesPct
                 .multiply(BigDecimal.valueOf(quantity.getQty() == null ? 0 : quantity.getQty()))
                 .add(zeroIfNull(quantity.getPcbNre()))
@@ -632,6 +697,7 @@ public class QuoteService {
                 quote.getQuoteNumber(), quote.getQuoteType(), quote.getProjectNumber(),
                 quote.getCreateDate(), quote.getSubmitDate(), quote.getReceivedDate(),
                 quote.getCustId(), quote.getCustomerName(), quote.getContId(), quote.getContactName(),
+                contactIdSignature(quote),
                 quote.getCustomerRfq(), quote.getNcId(), quote.getNcNumber(),
                 quote.getAssyNumber(), quote.getPcbaRevision(), quote.getPcbNumber(), quote.getPcbRevision(),
                 quote.getAssyQuoteStatus(), quote.getPcbQuoteNumber(), quote.getPcbQuoteStatus(),
@@ -709,7 +775,9 @@ public class QuoteService {
                 quote.getCustomerName(),
                 quote.getNcNumber(),
                 quote.getAssyNumber(),
+                quote.getPcbaRevision(),
                 quote.getPcbNumber(),
+                quote.getPcbRevision(),
                 quote.getAssyQuoteStatus(),
                 quote.getPcbQuoteStatus(),
                 quote.getStatus(),
@@ -785,7 +853,9 @@ public class QuoteService {
                                 .map(QuoteService::toHistoryResponse).toList()
                         : List.of(),
                 includeAudit ? lockService.find(quote.getQid(), userId) : null,
-                familySize
+                familySize,
+                attachmentRepository.findCategories(quote.getQid()),
+                toContactResponses(quote)
         );
     }
 
@@ -806,6 +876,7 @@ public class QuoteService {
                 quantity.getConfCoat(),
                 quantity.getServiceName(),
                 quantity.getServiceCharge(),
+                quantity.getCommissionPercentage(),
                 quantity.getSubTotal(),
                 quantity.getTotalSalesPct(),
                 quantity.getPcbNre(),
@@ -863,6 +934,174 @@ public class QuoteService {
 
     private static boolean isTrue(Boolean value) {
         return value != null && value;
+    }
+
+    /**
+     * A contact list replaces the rows. A null list keeps the older single contId.
+     * cont_id and contact_name always follow the primary contact.
+     * Rows that stay selected are updated in place so the primary key is not deleted and inserted again.
+     */
+    private void applyContacts(Quote quote, QuoteRequest request) {
+        if (request.contacts() == null) {
+            applyLegacyContact(quote, request.contId(), request.contactName());
+            return;
+        }
+        List<QuoteContactRequest> rows = request.contacts();
+        Map<Long, Contact> byId = requireQuoteContacts(request.custId(), rows);
+        String primaryName = null;
+        for (QuoteContactRequest row : rows) {
+            if (row.primary()) {
+                primaryName = contactLabel(byId.get(row.contId()));
+            }
+        }
+        writeContacts(quote, rows, primaryName);
+    }
+
+    /** Clients that still send only contId get one primary row. */
+    private void applyLegacyContact(Quote quote, Long contId, String contactName) {
+        List<QuoteContactRequest> rows = contId == null
+                ? List.of()
+                : List.of(new QuoteContactRequest(contId, true));
+        writeContacts(quote, rows, resolveContactName(contId, contactName));
+    }
+
+    private static void writeContacts(Quote quote, List<QuoteContactRequest> rows, String primaryName) {
+        Set<Long> kept = new HashSet<>();
+        for (QuoteContactRequest row : rows) {
+            kept.add(row.contId());
+        }
+        quote.getContacts().removeIf(link -> link.getContId() == null || !kept.contains(link.getContId()));
+        Map<Long, QuoteContact> remaining = new HashMap<>();
+        for (QuoteContact link : quote.getContacts()) {
+            remaining.put(link.getContId(), link);
+        }
+        QuoteContactRequest primary = null;
+        for (QuoteContactRequest row : rows) {
+            QuoteContact link = remaining.get(row.contId());
+            if (link == null) {
+                link = new QuoteContact();
+                link.setContId(row.contId());
+                link.setQuote(quote);
+                quote.getContacts().add(link);
+            }
+            link.setPrimaryContact(row.primary());
+            if (row.primary()) {
+                primary = row;
+            }
+        }
+        if (primary == null) {
+            quote.setContId(null);
+            quote.setContactName(null);
+            return;
+        }
+        quote.setContId(primary.contId());
+        quote.setContactName(primaryName);
+    }
+
+    private Map<Long, Contact> requireQuoteContacts(Long custId, List<QuoteContactRequest> rows) {
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        if (custId == null) {
+            throw new QuoteValidationException("Choose a customer before selecting contacts.");
+        }
+        Set<Long> seen = new HashSet<>();
+        int primaries = 0;
+        List<Long> ids = new ArrayList<>();
+        for (QuoteContactRequest row : rows) {
+            if (row == null || row.contId() == null) {
+                throw new QuoteValidationException("contId is required");
+            }
+            if (!seen.add(row.contId())) {
+                throw new QuoteValidationException("Each contact can be selected once.");
+            }
+            if (row.primary()) {
+                primaries++;
+            }
+            ids.add(row.contId());
+        }
+        if (primaries != 1) {
+            throw new QuoteValidationException(primaries == 0
+                    ? "Select one primary contact."
+                    : "A quote can have only one primary contact.");
+        }
+        Map<Long, Contact> byId = contactsById(ids);
+        if (byId.size() != ids.size()) {
+            throw new QuoteValidationException("A selected contact was not found.");
+        }
+        for (Contact contact : byId.values()) {
+            Long owner = contact.getCustomer() == null ? null : contact.getCustomer().getCustId();
+            if (!custId.equals(owner)) {
+                throw new QuoteValidationException("Each contact must belong to the quote customer.");
+            }
+        }
+        return byId;
+    }
+
+    /** Snapshot, so a later edit of the contact rows does not rewrite an earlier signature. */
+    private static List<Long> contactIdSignature(Quote quote) {
+        List<Long> ids = new ArrayList<>();
+        if (quote.getContacts() != null && !quote.getContacts().isEmpty()) {
+            for (QuoteContact link : quote.getContacts()) {
+                if (link.getContId() != null) {
+                    ids.add(link.getContId());
+                }
+            }
+        } else if (quote.getContId() != null) {
+            ids.add(quote.getContId());
+        }
+        ids.sort(Comparator.naturalOrder());
+        return List.copyOf(ids);
+    }
+
+    private List<QuoteContactResponse> toContactResponses(Quote quote) {
+        List<QuoteContact> links = quote.getContacts() == null ? List.of() : new ArrayList<>(quote.getContacts());
+        if (links.isEmpty()) {
+            if (quote.getContId() == null) {
+                return List.of();
+            }
+            Contact contact = contactRepository.findById(quote.getContId()).orElse(null);
+            return List.of(new QuoteContactResponse(
+                    quote.getContId(),
+                    displayedContactName(quote),
+                    contact == null ? null : blankToNull(contact.getEmail()),
+                    true));
+        }
+        Map<Long, Contact> byId = contactsById(links.stream().map(QuoteContact::getContId).toList());
+        links.sort(Comparator
+                .comparing(QuoteContact::isPrimaryContact).reversed()
+                .thenComparing(QuoteContact::getContId, Comparator.nullsLast(Comparator.naturalOrder())));
+        List<QuoteContactResponse> responses = new ArrayList<>();
+        for (QuoteContact link : links) {
+            Contact contact = byId.get(link.getContId());
+            String name = contact == null ? null : contactLabel(contact);
+            if (link.isPrimaryContact()) {
+                String stored = displayedContactName(quote);
+                if (stored != null) {
+                    name = stored;
+                }
+            }
+            if (name == null) {
+                name = "Contact #" + link.getContId();
+            }
+            String email = contact == null ? null : blankToNull(contact.getEmail());
+            responses.add(new QuoteContactResponse(link.getContId(), name, email, link.isPrimaryContact()));
+        }
+        return responses;
+    }
+
+    private Map<Long, Contact> contactsById(List<Long> ids) {
+        List<Contact> found = contactRepository.findAllById(ids);
+        Map<Long, Contact> byId = new HashMap<>();
+        if (found == null) {
+            return byId;
+        }
+        for (Contact contact : found) {
+            if (contact.getContId() != null) {
+                byId.put(contact.getContId(), contact);
+            }
+        }
+        return byId;
     }
 
     private String displayedContactName(Quote quote) {

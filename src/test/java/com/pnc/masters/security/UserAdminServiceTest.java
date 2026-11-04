@@ -28,13 +28,15 @@ class UserAdminServiceTest {
 
     @Mock private AppUserRepository userRepository;
     @Mock private RoleRepository roleRepository;
+    @Mock private EmployeeGroupRepository groups;
+    @Mock private EmployeeGroupMemberRepository members;
     @Mock private PasswordEncoder passwordEncoder;
 
     private UserAdminService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserAdminService(userRepository, roleRepository, passwordEncoder);
+        service = new UserAdminService(userRepository, roleRepository, groups, members, passwordEncoder);
     }
 
     @Test
@@ -62,7 +64,8 @@ class UserAdminServiceTest {
                 null,
                 "Engineer",
                 null,
-                "555-0100"
+                "555-0100",
+                null
         ));
 
         assertThat(response.userId()).isEqualTo(12L);
@@ -86,7 +89,8 @@ class UserAdminServiceTest {
                 "Ada",
                 List.of(),
                 true,
-                null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null,
+                null
         ))).isInstanceOf(DuplicateEmailException.class);
     }
 
@@ -111,6 +115,7 @@ class UserAdminServiceTest {
                 null,
                 "Lead",
                 "9-5",
+                null,
                 null
         ));
 
@@ -134,8 +139,28 @@ class UserAdminServiceTest {
                 "Admin",
                 List.of("USER"),
                 true,
-                null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null,
+                null
         ))).isInstanceOf(RoleConflictException.class);
+    }
+
+    @Test
+    void updateRejectsAGroupThatIsNotActive() {
+        AppUser existing = user(12L, "ada@example.com", "Ada", true, Set.of(role("USER")));
+        when(userRepository.findById(12L)).thenReturn(Optional.of(existing));
+        when(roleRepository.findByRoleCodeIgnoreCase("USER")).thenReturn(Optional.of(role("USER")));
+        when(groups.findByGroupIdInAndDeletedFalse(List.of(9L))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.update(12L, new AdminUserUpdateRequest(
+                "ada@example.com",
+                null,
+                "Ada",
+                List.of("USER"),
+                true,
+                null, null, null, null, null, null, null, null,
+                List.of(9L)
+        ))).isInstanceOf(com.pnc.masters.security.api.EmployeeGroupValidationException.class)
+                .hasMessage("Choose a group from the list");
     }
 
     private static AppUser user(Long id, String email, String name, boolean enabled, Set<Role> roles) {

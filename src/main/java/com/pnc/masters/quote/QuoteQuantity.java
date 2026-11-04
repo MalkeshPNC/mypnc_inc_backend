@@ -64,6 +64,9 @@ public class QuoteQuantity {
     @Column(name = "service_charge", precision = 12, scale = 2)
     private BigDecimal serviceCharge;
 
+    @Column(name = "commission_percentage", precision = 6, scale = 2)
+    private BigDecimal commissionPercentage;
+
     @Column(name = "sub_total", precision = 12, scale = 2)
     private BigDecimal subTotal;
 
@@ -121,6 +124,8 @@ public class QuoteQuantity {
     public void setServiceName(String serviceName) { this.serviceName = serviceName; }
     public BigDecimal getServiceCharge() { return serviceCharge; }
     public void setServiceCharge(BigDecimal serviceCharge) { this.serviceCharge = serviceCharge; }
+    public BigDecimal getCommissionPercentage() { return commissionPercentage; }
+    public void setCommissionPercentage(BigDecimal commissionPercentage) { this.commissionPercentage = commissionPercentage; }
     public BigDecimal getSubTotal() { return subTotal; }
     public void setSubTotal(BigDecimal subTotal) { this.subTotal = subTotal; }
     public BigDecimal getTotalSalesPct() { return totalSalesPct; }

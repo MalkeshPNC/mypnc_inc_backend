@@ -12,6 +12,7 @@ import java.time.Clock;
 public class PncMastersApplication {
 
     public static void main(String[] args) {
+        EnvFileLoader.load(args);
         SpringApplication.run(PncMastersApplication.class, args);
     }
 

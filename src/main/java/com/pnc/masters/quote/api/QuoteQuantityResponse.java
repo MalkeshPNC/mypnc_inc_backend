@@ -18,6 +18,7 @@ public record QuoteQuantityResponse(
         BigDecimal confCoat,
         String serviceName,
         BigDecimal serviceCharge,
+        BigDecimal commissionPercentage,
         BigDecimal subTotal,
         BigDecimal totalSalesPct,
         BigDecimal pcbNre,

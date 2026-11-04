@@ -10,8 +10,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * assyQuotePerson and pcbQuotePerson are deliberately absent: the server stamps
- * each one when its matching status changes.
+ * AQ and PQ people are chosen on the form. A null leaves the stored name alone.
  */
 public record QuoteRequest(
         @NotBlank(message = "quoteNumber is required") String quoteNumber,
@@ -61,6 +60,10 @@ public record QuoteRequest(
         String faiHeadingAs9102,
         @Valid List<QuoteQuantityRequest> quantities,
         /** Set when this create is a copy, so the new row keeps that quote's family key. */
-        Long copyFromQid
+        Long copyFromQid,
+        String assyQuotePerson,
+        String pcbQuotePerson,
+        /** Null keeps the single contId. An empty list clears every contact. */
+        @Valid List<QuoteContactRequest> contacts
 ) {
 }

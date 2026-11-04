@@ -13,6 +13,9 @@ import com.pnc.masters.configuration.api.SubConfigurationTypeExistsException;
 import com.pnc.masters.configuration.api.SubConfigurationTypeNotFoundException;
 import com.pnc.masters.configuration.api.SubConfigurationValidationException;
 import com.pnc.masters.contact.api.ContactNotFoundException;
+import com.pnc.masters.devtrack.api.DevTrackForbiddenException;
+import com.pnc.masters.devtrack.api.DevTrackNotFoundException;
+import com.pnc.masters.devtrack.api.DevTrackValidationException;
 import com.pnc.masters.document.api.DocumentNotFoundException;
 import com.pnc.masters.document.api.DocumentValidationException;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
@@ -22,9 +25,15 @@ import com.pnc.masters.quote.api.QuoteLockedException;
 import com.pnc.masters.quote.api.QuoteNotFoundException;
 import com.pnc.masters.quote.api.QuoteNumberExistsException;
 import com.pnc.masters.quote.api.QuoteValidationException;
+import com.pnc.masters.quote.api.QuoteEmailLogNotFoundException;
 import com.pnc.masters.salesperson.api.SalesPersonInUseException;
+import com.pnc.masters.task.api.TaskNotFoundException;
+import com.pnc.masters.task.api.TaskForbiddenException;
+import com.pnc.masters.task.api.TaskValidationException;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import com.pnc.masters.security.api.DuplicateEmailException;
+import com.pnc.masters.security.api.EmployeeGroupNotFoundException;
+import com.pnc.masters.security.api.EmployeeGroupValidationException;
 import com.pnc.masters.security.api.InvalidCredentialsException;
 import com.pnc.masters.security.api.ModuleConflictException;
 import com.pnc.masters.security.api.ModuleNotFoundException;
@@ -105,6 +114,51 @@ public class ApiExceptionHandler {
     @ExceptionHandler(QuoteValidationException.class)
     public ResponseEntity<Map<String, Object>> handleQuoteValidation(QuoteValidationException exception) {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(EmployeeGroupNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleEmployeeGroupNotFound(EmployeeGroupNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(EmployeeGroupValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleEmployeeGroupValidation(EmployeeGroupValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(TaskNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleTaskNotFound(TaskNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(TaskValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleTaskValidation(TaskValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(TaskForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleTaskForbidden(TaskForbiddenException exception) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DevTrackNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleDevTrackNotFound(DevTrackNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DevTrackValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleDevTrackValidation(DevTrackValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DevTrackForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleDevTrackForbidden(DevTrackForbiddenException exception) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteEmailLogNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteEmailLogNotFound(QuoteEmailLogNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(QuoteLockedException.class)

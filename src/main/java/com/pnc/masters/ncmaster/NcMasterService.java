@@ -3,7 +3,6 @@ package com.pnc.masters.ncmaster;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcMasterResponse;
-import com.pnc.masters.ncmaster.api.NcMasterValidationException;
 import com.pnc.masters.ncmaster.api.NcNumberAvailabilityResponse;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
 import com.pnc.masters.ncmaster.api.PcbaNoteLookupResponse;
@@ -79,9 +78,6 @@ public class NcMasterService {
         if (part == null) {
             return new PcbaNoteLookupResponse(false, null, "", null);
         }
-        if (!PcbaPartNumbers.isValid(part)) {
-            throw new NcMasterValidationException(PcbaPartNumbers.MESSAGE);
-        }
         return pcbaNoteRepository.findByPcbaPartNumberIgnoreCase(part)
                 .map(note -> new PcbaNoteLookupResponse(true, note.getPcbaNoteId(), note.getPcbaPartNumber(), note.getPcbaNotes()))
                 .orElseGet(() -> new PcbaNoteLookupResponse(false, null, part, null));
@@ -116,9 +112,6 @@ public class NcMasterService {
 
     private void applyRequest(NcMaster record, NcMasterRequest request, String ncNumber) {
         String partNumber = blankToNull(request.pcbaPartNumber());
-        if (partNumber != null && !PcbaPartNumbers.isValid(partNumber)) {
-            throw new NcMasterValidationException(PcbaPartNumbers.MESSAGE);
-        }
         record.setNcNumber(ncNumber);
         record.setPcbPartNumber(blankToNull(request.pcbPartNumber()));
         record.setPcbRev(blankToNull(request.pcbRev()));

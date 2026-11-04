@@ -63,6 +63,32 @@ public class SubConfigurationService {
         );
     }
 
+    public SubConfigurationTypeResponse updateType(Long typeId, SubConfigurationTypeRequest request) {
+        SubConfigType type = typeRepository.findById(typeId)
+                .orElseThrow(() -> new SubConfigurationTypeNotFoundException(typeId));
+        List<String> current = SubConfigSlots.labelsOf(type);
+        List<String> labels = normalizeLabels(request.fieldLabels());
+        if (labels.size() < current.size()) {
+            throw new SubConfigurationValidationException("Keep the columns that already exist. You can add a new one.");
+        }
+        type.setTypeName(request.typeName().trim());
+        SubConfigSlots.applyLabels(type, labels);
+        return toTypeResponse(typeRepository.save(type));
+    }
+
+    public SubConfigurationEntryResponse updateEntry(Long typeId, Long entryId, SubConfigurationEntryRequest request) {
+        SubConfigType type = typeRepository.findById(typeId)
+                .orElseThrow(() -> new SubConfigurationTypeNotFoundException(typeId));
+        SubConfigEntry entry = entryRepository.findById(entryId)
+                .orElseThrow(() -> new SubConfigurationEntryNotFoundException(entryId));
+        if (entry.getType() == null || !typeId.equals(entry.getType().getTypeId())) {
+            throw new SubConfigurationEntryNotFoundException(entryId);
+        }
+        List<String> labels = SubConfigSlots.labelsOf(type);
+        SubConfigSlots.applyValues(entry, normalizeValues(request.values(), labels.size()));
+        return toEntryResponse(entryRepository.save(entry), labels.size());
+    }
+
     public SubConfigurationEntryResponse createEntry(Long typeId, SubConfigurationEntryRequest request, Long userId) {
         SubConfigType type = typeRepository.findById(typeId)
                 .orElseThrow(() -> new SubConfigurationTypeNotFoundException(typeId));

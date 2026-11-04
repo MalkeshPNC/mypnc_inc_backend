@@ -1,9 +1,11 @@
 package com.pnc.masters.security;
 
+import com.pnc.masters.security.api.AdminUserGroupResponse;
 import com.pnc.masters.security.api.AdminUserCreateRequest;
 import com.pnc.masters.security.api.AdminUserResponse;
 import com.pnc.masters.security.api.AdminUserUpdateRequest;
 import com.pnc.masters.security.api.DuplicateEmailException;
+import com.pnc.masters.security.api.EmployeeGroupValidationException;
 import com.pnc.masters.security.api.RoleConflictException;
 import com.pnc.masters.security.api.RoleNotFoundException;
 import com.pnc.masters.security.api.UserEnabledRequest;
@@ -13,9 +15,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -24,21 +30,29 @@ public class UserAdminService {
 
     private final AppUserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final EmployeeGroupRepository groups;
+    private final EmployeeGroupMemberRepository members;
     private final PasswordEncoder passwordEncoder;
 
     public UserAdminService(
             AppUserRepository userRepository,
             RoleRepository roleRepository,
+            EmployeeGroupRepository groups,
+            EmployeeGroupMemberRepository members,
             PasswordEncoder passwordEncoder
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.groups = groups;
+        this.members = members;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional(readOnly = true)
     public List<AdminUserResponse> findAll() {
-        return userRepository.findAllByOrderByEmailAsc().stream().map(this::toResponse).toList();
+        List<AppUser> users = userRepository.findAllByOrderByEmailAsc();
+        Map<Long, List<AdminUserGroupResponse>> membership = groupsFor(users.stream().map(AppUser::getUserId).toList());
+        return users.stream().map(user -> toResponse(user, membership.getOrDefault(user.getUserId(), List.of()))).toList();
     }
 
     public AdminUserResponse create(AdminUserCreateRequest request) {
@@ -63,7 +77,9 @@ public class UserAdminService {
                 request.contactNumber()
         );
         user.setRoles(resolveRoles(request.roles(), true));
-        return toResponse(userRepository.save(user));
+        AppUser saved = userRepository.save(user);
+        replaceGroups(saved.getUserId(), request.groupIds() == null ? List.of() : request.groupIds());
+        return toResponse(saved);
     }
 
     public AdminUserResponse update(Long userId, AdminUserUpdateRequest request) {
@@ -93,6 +109,9 @@ public class UserAdminService {
         }
         if (request.enabled() != null) {
             applyEnabled(user, request.enabled());
+        }
+        if (request.groupIds() != null) {
+            replaceGroups(user.getUserId(), request.groupIds());
         }
         return toResponse(userRepository.save(user));
     }
@@ -184,11 +203,60 @@ public class UserAdminService {
         return user.getRoles().stream().anyMatch(role -> AuthService.ROLE_ADMIN.equals(role.getRoleCode()));
     }
 
+    private void replaceGroups(Long userId, List<Long> groupIds) {
+        List<Long> ids = groupIds == null
+                ? List.of()
+                : groupIds.stream().filter(id -> id != null).distinct().toList();
+        if (!ids.isEmpty()) {
+            List<EmployeeGroup> found = groups.findByGroupIdInAndDeletedFalse(ids);
+            if (found.size() != ids.size()) {
+                throw new EmployeeGroupValidationException("Choose a group from the list");
+            }
+        }
+        members.deleteByUserId(userId);
+        members.flush();
+        for (Long groupId : ids) {
+            EmployeeGroupMember row = new EmployeeGroupMember();
+            row.setGroupId(groupId);
+            row.setUserId(userId);
+            members.save(row);
+        }
+    }
+
+    private Map<Long, List<AdminUserGroupResponse>> groupsFor(Collection<Long> userIds) {
+        List<Long> ids = userIds.stream().filter(id -> id != null).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<EmployeeGroupMember> links = members.findByUserIdIn(ids);
+        if (links.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, EmployeeGroup> byId = new HashMap<>();
+        for (EmployeeGroup group : groups.findByGroupIdInAndDeletedFalse(links.stream().map(EmployeeGroupMember::getGroupId).distinct().toList())) {
+            byId.put(group.getGroupId(), group);
+        }
+        Map<Long, List<AdminUserGroupResponse>> membership = new HashMap<>();
+        for (EmployeeGroupMember link : links) {
+            EmployeeGroup group = byId.get(link.getGroupId());
+            if (group == null) {
+                continue;
+            }
+            membership.computeIfAbsent(link.getUserId(), key -> new ArrayList<>())
+                    .add(new AdminUserGroupResponse(group.getGroupId(), group.getName()));
+        }
+        return membership;
+    }
+
     private AppUser getUser(Long userId) {
         return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
     }
 
     private AdminUserResponse toResponse(AppUser user) {
+        return toResponse(user, groupsFor(List.of(user.getUserId())).getOrDefault(user.getUserId(), List.of()));
+    }
+
+    private AdminUserResponse toResponse(AppUser user, List<AdminUserGroupResponse> groups) {
         return new AdminUserResponse(
                 user.getUserId(),
                 user.getEmail(),
@@ -202,7 +270,8 @@ public class UserAdminService {
                 user.getDateOfBirth(),
                 user.getDesignation(),
                 user.getRegularTiming(),
-                user.getContactNumber()
+                user.getContactNumber(),
+                groups
         );
     }
 }

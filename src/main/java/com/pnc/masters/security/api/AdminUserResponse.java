@@ -16,6 +16,7 @@ public record AdminUserResponse(
         LocalDate dateOfBirth,
         String designation,
         String regularTiming,
-        String contactNumber
+        String contactNumber,
+        List<AdminUserGroupResponse> groups
 ) {
 }

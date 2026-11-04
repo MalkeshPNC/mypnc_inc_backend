@@ -53,6 +53,18 @@ public final class ModuleAccessPolicy {
             }
             return AccessDecision.any(ModuleAccessLevel.WRITE, "QUOTE", "CUSTOMERS", "CONFIGURATION");
         }
+        if (uri.matches("/api/v1/tasks/\\d+/progress")) {
+            return AccessDecision.module("TASKS", ModuleAccessLevel.READ);
+        }
+        if (uri.startsWith("/api/v1/tasks")) {
+            return AccessDecision.module("TASKS", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+        }
+        if (uri.startsWith("/api/v1/development-track")) {
+            return AccessDecision.module("DEVELOPMENT_TRACK", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+        }
+        if (uri.startsWith("/api/v1/employee-groups")) {
+            return AccessDecision.module("SECURITY", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+        }
         return AccessDecision.open();
     }
 

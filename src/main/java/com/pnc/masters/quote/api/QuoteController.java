@@ -105,6 +105,15 @@ public class QuoteController {
         return ResponseEntity.created(location).body(response);
     }
 
+    @PutMapping("/{id}/nc")
+    public QuoteResponse changeNc(
+            @PathVariable Long id,
+            @RequestBody QuoteNcChangeRequest request,
+            Authentication authentication
+    ) {
+        return quoteService.changeNc(id, request, userId(authentication));
+    }
+
     @PutMapping("/{id}")
     public QuoteResponse update(
             @PathVariable Long id,

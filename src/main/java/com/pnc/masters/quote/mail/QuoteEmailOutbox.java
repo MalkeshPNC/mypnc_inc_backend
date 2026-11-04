@@ -6,8 +6,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "tblquote_email_outbox")
@@ -25,8 +27,14 @@ public class QuoteEmailOutbox {
     @Column(name = "quote_id", nullable = false)
     private Long quoteId;
 
+    @Column(name = "quote_number", nullable = false, length = 80)
+    private String quoteNumber;
+
     @Column(name = "user_id", nullable = false)
     private Long userId;
+
+    @Column(name = "from_address", nullable = false, length = 200)
+    private String fromAddress;
 
     @Column(nullable = false, length = 3000)
     private String recipients;
@@ -58,12 +66,20 @@ public class QuoteEmailOutbox {
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
 
+    /** Loaded for sending. Not a column; the bytes live in tblquote_email_files. */
+    @Transient
+    private List<QuoteEmailFile> extraFiles = List.of();
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Long getQuoteId() { return quoteId; }
     public void setQuoteId(Long quoteId) { this.quoteId = quoteId; }
+    public String getQuoteNumber() { return quoteNumber; }
+    public void setQuoteNumber(String quoteNumber) { this.quoteNumber = quoteNumber; }
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
+    public String getFromAddress() { return fromAddress; }
+    public void setFromAddress(String fromAddress) { this.fromAddress = fromAddress; }
     public String getRecipients() { return recipients; }
     public void setRecipients(String recipients) { this.recipients = recipients; }
     public String getCcRecipients() { return ccRecipients; }
@@ -84,4 +100,6 @@ public class QuoteEmailOutbox {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getSentAt() { return sentAt; }
     public void setSentAt(LocalDateTime sentAt) { this.sentAt = sentAt; }
+    public List<QuoteEmailFile> getExtraFiles() { return extraFiles; }
+    public void setExtraFiles(List<QuoteEmailFile> extraFiles) { this.extraFiles = extraFiles == null ? List.of() : extraFiles; }
 }

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,6 +41,19 @@ public class QuoteEmailController {
         headers.setContentDisposition(ContentDisposition.inline().filename(pdf.fileName()).build());
         headers.setContentLength(pdf.content().length);
         return ResponseEntity.ok().headers(headers).body(pdf.content());
+    }
+
+    @GetMapping("/email-log")
+    public QuoteEmailLogPageResponse log(@RequestParam(required = false) Long userId,
+                                         @RequestParam(defaultValue = "0") int page,
+                                         @RequestParam(required = false) Integer size,
+                                         Authentication authentication) {
+        return emails.log((Long) authentication.getPrincipal(), userId, page, size);
+    }
+
+    @GetMapping("/email-log/{id}")
+    public QuoteEmailLogDetailResponse logDetail(@PathVariable Long id, Authentication authentication) {
+        return emails.logDetail((Long) authentication.getPrincipal(), id);
     }
 
     @PostMapping("/{id}/email")

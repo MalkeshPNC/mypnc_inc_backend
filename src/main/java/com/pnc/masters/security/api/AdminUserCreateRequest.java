@@ -20,6 +20,7 @@ public record AdminUserCreateRequest(
         LocalDate dateOfBirth,
         @Size(max = 120) String designation,
         @Size(max = 80) String regularTiming,
-        @Size(max = 40) String contactNumber
+        @Size(max = 40) String contactNumber,
+        List<Long> groupIds
 ) {
 }

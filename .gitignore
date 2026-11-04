@@ -4,6 +4,8 @@ target/
 *.iml
 .env
 .env.*
+!.env.example
+!.env.staging.example
 images/
 data/
 *.log

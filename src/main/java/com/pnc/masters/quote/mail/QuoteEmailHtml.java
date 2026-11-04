@@ -1,6 +1,7 @@
 package com.pnc.masters.quote.mail;
 
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.jsoup.safety.Safelist;
 
 public final class QuoteEmailHtml {
@@ -17,7 +18,14 @@ public final class QuoteEmailHtml {
         if (html == null || html.isBlank()) {
             return "";
         }
-        return Jsoup.clean(html, ALLOWED);
+        Document doc = Jsoup.parseBodyFragment(Jsoup.clean(html, ALLOWED));
+        doc.select("p, ul, ol, h1, h2, h3").forEach(element -> {
+            if ("p".equals(element.normalName()) && element.text().isBlank() && element.select("img").isEmpty()) {
+                return;
+            }
+            element.attr("style", "margin:0;mso-margin-top-alt:0;mso-margin-bottom-alt:0;");
+        });
+        return doc.body().html();
     }
 
     public static boolean isBlank(String html) {

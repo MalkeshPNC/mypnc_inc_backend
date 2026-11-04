@@ -186,6 +186,9 @@ public class Quote {
     @OrderBy("qtyId")
     private List<QuoteQuantity> quantities = new ArrayList<>();
 
+    @OneToMany(mappedBy = "quote", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<QuoteContact> contacts = new ArrayList<>();
+
     @PrePersist
     void setCreatedAt() {
         if (createdAt == null) {
@@ -304,4 +307,6 @@ public class Quote {
     public void setDeleted(boolean deleted) { this.isDeleted = deleted; }
     public List<QuoteQuantity> getQuantities() { return quantities; }
     public void setQuantities(List<QuoteQuantity> quantities) { this.quantities = quantities; }
+    public List<QuoteContact> getContacts() { return contacts; }
+    public void setContacts(List<QuoteContact> contacts) { this.contacts = contacts; }
 }

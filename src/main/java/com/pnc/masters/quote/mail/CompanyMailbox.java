@@ -47,6 +47,15 @@ public class CompanyMailbox implements QuoteMailbox {
                     message.getAttachmentName(),
                     new ByteArrayResource(message.getPdfContent()),
                     "application/pdf");
+            for (QuoteEmailFile file : message.getExtraFiles()) {
+                if (file.getContent() == null || file.getContent().length == 0) {
+                    continue;
+                }
+                String type = file.getContentType() == null || file.getContentType().isBlank()
+                        ? "application/octet-stream"
+                        : file.getContentType();
+                helper.addAttachment(file.getFileName(), new ByteArrayResource(file.getContent()), type);
+            }
             mail.send(mime);
         } catch (Exception exception) {
             String detail = exception.getMessage();

@@ -2,7 +2,6 @@ package com.pnc.masters.ncmaster;
 
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
-import com.pnc.masters.ncmaster.api.NcMasterValidationException;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
 import com.pnc.masters.security.AppUser;
 import com.pnc.masters.security.AppUserRepository;
@@ -84,13 +83,18 @@ class NcMasterServiceTest {
     }
 
     @Test
-    void createRejectsAPcbaPartNumberWithUnsupportedCharacters() {
-        assertThatThrownBy(() -> service.create(
-                new NcMasterRequest("NC-100", null, null, "PCBA 1", null, null, null, "note"),
+    void createKeepsSpacesInThePcbaPartNumber() {
+        when(ncMasterRepository.existsByNcNumberIgnoreCase("NC-100")).thenReturn(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+        when(ncMasterRepository.save(any(NcMaster.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pcbaNoteRepository.findByPcbaPartNumberIgnoreCase("PCBA 1 / REV A")).thenReturn(Optional.empty());
+
+        var response = service.create(
+                new NcMasterRequest("NC-100", null, null, "PCBA 1 / REV A", null, null, null, null),
                 1L
-        )).isInstanceOf(NcMasterValidationException.class);
-        verify(ncMasterRepository, never()).save(any());
-        verify(pcbaNoteRepository, never()).save(any());
+        );
+
+        assertThat(response.pcbaPartNumber()).isEqualTo("PCBA 1 / REV A");
     }
 
     @Test

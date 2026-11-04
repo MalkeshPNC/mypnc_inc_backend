@@ -86,6 +86,14 @@ public class AppConfigurationController {
         return ResponseEntity.created(location).body(response);
     }
 
+    @PutMapping("/types/{typeId}")
+    public SubConfigurationTypeResponse updateType(
+            @PathVariable Long typeId,
+            @Valid @RequestBody SubConfigurationTypeRequest request
+    ) {
+        return subConfigurationService.updateType(typeId, request);
+    }
+
     @PostMapping("/types/{typeId}/entries")
     public ResponseEntity<SubConfigurationEntryResponse> createEntry(
             @PathVariable Long typeId,
@@ -97,6 +105,15 @@ public class AppConfigurationController {
         URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{entryId}")
                 .buildAndExpand(response.entryId()).toUri();
         return ResponseEntity.created(location).body(response);
+    }
+
+    @PutMapping("/types/{typeId}/entries/{entryId}")
+    public SubConfigurationEntryResponse updateEntry(
+            @PathVariable Long typeId,
+            @PathVariable Long entryId,
+            @Valid @RequestBody SubConfigurationEntryRequest request
+    ) {
+        return subConfigurationService.updateEntry(typeId, entryId, request);
     }
 
     @DeleteMapping("/types/{typeId}/entries/{entryId}")
