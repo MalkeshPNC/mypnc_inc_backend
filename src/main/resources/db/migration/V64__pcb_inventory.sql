@@ -1,0 +1,41 @@
+CREATE TABLE tblpcb_inventory (
+    item_id BIGINT NOT NULL AUTO_INCREMENT,
+    description VARCHAR(500) NOT NULL,
+    item_type VARCHAR(40) NOT NULL,
+    location VARCHAR(200) NULL,
+    manufacturer_id BIGINT NULL,
+    sheet_size VARCHAR(200) NULL,
+    available INT NOT NULL DEFAULT 0,
+    allocated INT NOT NULL DEFAULT 0,
+    on_order INT NOT NULL DEFAULT 0,
+    lead_time VARCHAR(80) NULL,
+    reorder_level INT NOT NULL DEFAULT 0,
+    reorder_qty INT NOT NULL DEFAULT 0,
+    alert_on_item VARCHAR(500) NULL,
+    std_price DECIMAL(12, 2) NULL,
+    comments TEXT NULL,
+    PRIMARY KEY (item_id),
+    KEY idx_pcb_inventory_manufacturer (manufacturer_id),
+    KEY idx_pcb_inventory_on_order (on_order),
+    CONSTRAINT fk_pcb_inventory_manufacturer FOREIGN KEY (manufacturer_id) REFERENCES tblmanufacturers (manufacturer_id)
+);
+
+CREATE TABLE tblpcb_inventory_txn (
+    txn_id BIGINT NOT NULL AUTO_INCREMENT,
+    item_id BIGINT NOT NULL,
+    trans_type VARCHAR(20) NOT NULL,
+    vendor_id BIGINT NULL,
+    source_name VARCHAR(200) NULL,
+    source_number VARCHAR(120) NULL,
+    in_qty INT NOT NULL DEFAULT 0,
+    out_qty INT NOT NULL DEFAULT 0,
+    price DECIMAL(12, 2) NULL,
+    details TEXT NULL,
+    initial_name VARCHAR(200) NULL,
+    action_by VARCHAR(200) NULL,
+    action_date DATETIME NOT NULL,
+    PRIMARY KEY (txn_id),
+    KEY idx_pcb_inventory_txn_item (item_id, action_date),
+    CONSTRAINT fk_pcb_inventory_txn_item FOREIGN KEY (item_id) REFERENCES tblpcb_inventory (item_id),
+    CONSTRAINT fk_pcb_inventory_txn_vendor FOREIGN KEY (vendor_id) REFERENCES tblvendors (vendor_id)
+);

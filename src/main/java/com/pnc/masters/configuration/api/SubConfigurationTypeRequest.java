@@ -16,6 +16,9 @@ public record SubConfigurationTypeRequest(
         )
         String typeCode,
         @NotBlank @Size(max = 120) String typeName,
-        @NotEmpty @Size(min = 1, max = 8) List<@NotBlank @Size(max = 80) String> fieldLabels
+        @NotEmpty @Size(min = 1, max = 8) List<@NotBlank @Size(max = 80) String> fieldLabels,
+        @Size(max = 50)
+        @Pattern(regexp = "^$|^[A-Za-z][A-Za-z0-9_]*$", message = "moduleCode must be a module code such as QUOTE")
+        String moduleCode
 ) {
 }

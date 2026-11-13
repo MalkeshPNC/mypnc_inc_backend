@@ -39,6 +39,7 @@ public class AdminBootstrap implements ApplicationRunner {
         String email = properties.getBootstrapEmail().trim().toLowerCase();
         AppUser admin = userRepository.findByEmailIgnoreCase(email).orElseGet(AppUser::new);
         admin.setEmail(email);
+        admin.setUsername(email);
         admin.setDisplayName("Administrator");
         admin.setPasswordHash(passwordEncoder.encode(properties.getBootstrapPassword()));
         admin.setEnabled(true);

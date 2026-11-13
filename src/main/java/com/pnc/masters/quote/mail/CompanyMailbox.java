@@ -24,9 +24,6 @@ public class CompanyMailbox implements QuoteMailbox {
         if (!settings.isConfigured()) {
             throw new IllegalStateException("Mail is not configured.");
         }
-        if (message.getPdfContent() == null || message.getPdfContent().length == 0) {
-            throw new IllegalStateException("The quote PDF is missing.");
-        }
         JavaMailSenderImpl mail = sender();
         try {
             MimeMessage mime = mail.createMimeMessage();
@@ -43,10 +40,14 @@ public class CompanyMailbox implements QuoteMailbox {
             }
             helper.setSubject(message.getSubject());
             helper.setText(message.getHtmlBody(), true);
-            helper.addAttachment(
-                    message.getAttachmentName(),
-                    new ByteArrayResource(message.getPdfContent()),
-                    "application/pdf");
+            byte[] pdf = message.getPdfContent();
+            if (pdf != null && pdf.length > 0) {
+                String name = message.getAttachmentName();
+                helper.addAttachment(
+                        name == null || name.isBlank() ? "quote.pdf" : name,
+                        new ByteArrayResource(pdf),
+                        "application/pdf");
+            }
             for (QuoteEmailFile file : message.getExtraFiles()) {
                 if (file.getContent() == null || file.getContent().length == 0) {
                     continue;

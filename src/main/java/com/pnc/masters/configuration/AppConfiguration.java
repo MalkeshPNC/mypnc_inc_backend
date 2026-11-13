@@ -30,6 +30,12 @@ public class AppConfiguration {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "updated_by", length = 200)
+    private String updatedBy;
+
+    @Column(name = "updated_by_user_id")
+    private Long updatedByUserId;
+
     public String getConfigKey() { return configKey; }
     public void setConfigKey(String configKey) { this.configKey = configKey; }
     public String getConfigValue() { return configValue; }
@@ -42,4 +48,8 @@ public class AppConfiguration {
     public void setValueType(String valueType) { this.valueType = valueType; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
+    public Long getUpdatedByUserId() { return updatedByUserId; }
+    public void setUpdatedByUserId(Long updatedByUserId) { this.updatedByUserId = updatedByUserId; }
 }

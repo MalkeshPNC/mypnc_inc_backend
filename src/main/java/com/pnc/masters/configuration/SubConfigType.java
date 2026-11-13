@@ -25,6 +25,9 @@ public class SubConfigType {
     @Column(name = "type_name", nullable = false, length = 120)
     private String typeName;
 
+    @Column(name = "module_code", length = 50)
+    private String moduleCode;
+
     @Column(name = "field_1_label", length = 80)
     private String field1Label;
     @Column(name = "field_2_label", length = 80)
@@ -47,6 +50,15 @@ public class SubConfigType {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_by", length = 200)
+    private String updatedBy;
+
+    @Column(name = "updated_by_user_id")
+    private Long updatedByUserId;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     @PrePersist
     void setCreatedAt() {
@@ -89,8 +101,16 @@ public class SubConfigType {
     public void setTypeCode(String typeCode) { this.typeCode = typeCode; }
     public String getTypeName() { return typeName; }
     public void setTypeName(String typeName) { this.typeName = typeName; }
+    public String getModuleCode() { return moduleCode; }
+    public void setModuleCode(String moduleCode) { this.moduleCode = moduleCode; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
+    public Long getUpdatedByUserId() { return updatedByUserId; }
+    public void setUpdatedByUserId(Long updatedByUserId) { this.updatedByUserId = updatedByUserId; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

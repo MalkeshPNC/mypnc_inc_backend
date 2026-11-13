@@ -39,7 +39,7 @@ class AuthServiceTest {
         user.setEmail("ada@example.com");
         user.setPasswordHash("hash");
         user.setEnabled(true);
-        when(userRepository.findByEmailIgnoreCase("ada@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByUsernameIgnoreCase("ada@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "hash")).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("ada@example.com", "wrong")))

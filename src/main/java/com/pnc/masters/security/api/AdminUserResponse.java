@@ -5,6 +5,7 @@ import java.util.List;
 
 public record AdminUserResponse(
         Long userId,
+        String username,
         String email,
         String displayName,
         boolean enabled,

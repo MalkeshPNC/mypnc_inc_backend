@@ -13,6 +13,7 @@ import com.pnc.masters.security.AppUserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -24,22 +25,31 @@ public class SubConfigurationService {
     private final SubConfigTypeRepository typeRepository;
     private final SubConfigEntryRepository entryRepository;
     private final AppUserRepository userRepository;
+    private final MasterEntryUsage entryUsage;
 
     public SubConfigurationService(
             SubConfigTypeRepository typeRepository,
             SubConfigEntryRepository entryRepository,
-            AppUserRepository userRepository
+            AppUserRepository userRepository,
+            MasterEntryUsage entryUsage
     ) {
         this.typeRepository = typeRepository;
         this.entryRepository = entryRepository;
         this.userRepository = userRepository;
+        this.entryUsage = entryUsage;
     }
 
     @Transactional(readOnly = true)
     public List<SubConfigurationTypeResponse> findAllTypes() {
-        return typeRepository.findAllByOrderByTypeNameAsc().stream()
-                .map(this::toTypeResponse)
-                .toList();
+        return findTypes(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SubConfigurationTypeResponse> findTypes(String moduleCode) {
+        List<SubConfigType> types = moduleCode == null
+                ? typeRepository.findAllByOrderByTypeNameAsc()
+                : typeRepository.findSharedOrModule(moduleCode);
+        return types.stream().map(this::toTypeResponse).toList();
     }
 
     public SubConfigurationTypeResponse createType(SubConfigurationTypeRequest request, Long userId) {
@@ -51,6 +61,7 @@ public class SubConfigurationService {
         SubConfigType type = new SubConfigType();
         type.setTypeCode(typeCode);
         type.setTypeName(request.typeName().trim());
+        type.setModuleCode(moduleCode(request.moduleCode()));
         SubConfigSlots.applyLabels(type, labels);
         applyCreator(type, userId);
         SubConfigType saved = typeRepository.save(type);
@@ -58,12 +69,16 @@ public class SubConfigurationService {
                 saved.getTypeId(),
                 saved.getTypeCode(),
                 saved.getTypeName(),
+                saved.getModuleCode(),
                 SubConfigSlots.labelsOf(saved),
-                List.of()
+                List.of(),
+                saved.getUpdatedBy(),
+                saved.getUpdatedByUserId(),
+                saved.getUpdatedAt()
         );
     }
 
-    public SubConfigurationTypeResponse updateType(Long typeId, SubConfigurationTypeRequest request) {
+    public SubConfigurationTypeResponse updateType(Long typeId, SubConfigurationTypeRequest request, Long userId) {
         SubConfigType type = typeRepository.findById(typeId)
                 .orElseThrow(() -> new SubConfigurationTypeNotFoundException(typeId));
         List<String> current = SubConfigSlots.labelsOf(type);
@@ -72,11 +87,13 @@ public class SubConfigurationService {
             throw new SubConfigurationValidationException("Keep the columns that already exist. You can add a new one.");
         }
         type.setTypeName(request.typeName().trim());
+        type.setModuleCode(moduleCode(request.moduleCode()));
         SubConfigSlots.applyLabels(type, labels);
+        applyUpdater(type, userId);
         return toTypeResponse(typeRepository.save(type));
     }
 
-    public SubConfigurationEntryResponse updateEntry(Long typeId, Long entryId, SubConfigurationEntryRequest request) {
+    public SubConfigurationEntryResponse updateEntry(Long typeId, Long entryId, SubConfigurationEntryRequest request, Long userId) {
         SubConfigType type = typeRepository.findById(typeId)
                 .orElseThrow(() -> new SubConfigurationTypeNotFoundException(typeId));
         SubConfigEntry entry = entryRepository.findById(entryId)
@@ -86,6 +103,7 @@ public class SubConfigurationService {
         }
         List<String> labels = SubConfigSlots.labelsOf(type);
         SubConfigSlots.applyValues(entry, normalizeValues(request.values(), labels.size()));
+        applyUpdater(entry, userId);
         return toEntryResponse(entryRepository.save(entry), labels.size());
     }
 
@@ -107,6 +125,10 @@ public class SubConfigurationService {
         if (!entry.getType().getTypeId().equals(typeId)) {
             throw new SubConfigurationEntryNotFoundException(entryId);
         }
+        if (entryUsage.isReferenced(entryId)) {
+            throw new SubConfigurationValidationException(
+                    "This row is used by a vendor or manufacturer and cannot be removed.");
+        }
         entryRepository.delete(entry);
     }
 
@@ -121,8 +143,12 @@ public class SubConfigurationService {
                 type.getTypeId(),
                 type.getTypeCode(),
                 type.getTypeName(),
+                type.getModuleCode(),
                 labels,
-                entries
+                entries,
+                type.getUpdatedBy(),
+                type.getUpdatedByUserId(),
+                type.getUpdatedAt()
         );
     }
 
@@ -131,7 +157,10 @@ public class SubConfigurationService {
                 entry.getEntryId(),
                 SubConfigSlots.valuesOf(entry, fieldCount),
                 entry.getCreatedBy(),
-                entry.getCreatedAt()
+                entry.getCreatedAt(),
+                entry.getUpdatedBy(),
+                entry.getUpdatedByUserId(),
+                entry.getUpdatedAt()
         );
     }
 
@@ -144,6 +173,42 @@ public class SubConfigurationService {
         AppUser user = userRepository.findById(userId).orElse(null);
         entry.setCreatedByUserId(user == null ? null : user.getUserId());
         entry.setCreatedBy(user == null ? "Unknown" : user.getDisplayName());
+    }
+
+    private void applyUpdater(SubConfigType type, Long userId) {
+        AppUser user = findUser(userId);
+        type.setUpdatedBy(nameOf(user));
+        type.setUpdatedByUserId(user == null ? null : user.getUserId());
+        type.setUpdatedAt(LocalDateTime.now());
+    }
+
+    private void applyUpdater(SubConfigEntry entry, Long userId) {
+        AppUser user = findUser(userId);
+        entry.setUpdatedBy(nameOf(user));
+        entry.setUpdatedByUserId(user == null ? null : user.getUserId());
+        entry.setUpdatedAt(LocalDateTime.now());
+    }
+
+    private AppUser findUser(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        return userRepository.findById(userId).orElse(null);
+    }
+
+    private static String nameOf(AppUser user) {
+        return user == null ? "Unknown" : user.getDisplayName();
+    }
+
+    private static String moduleCode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String code = raw.trim().toUpperCase(Locale.ROOT);
+        if ("ALL".equals(code) || !code.matches("[A-Z][A-Z0-9_]{0,49}")) {
+            throw new SubConfigurationValidationException("Choose a module, or leave it shared.");
+        }
+        return code;
     }
 
     private static List<String> normalizeLabels(List<String> fieldLabels) {

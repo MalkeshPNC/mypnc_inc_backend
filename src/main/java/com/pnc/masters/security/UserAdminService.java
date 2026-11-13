@@ -4,13 +4,14 @@ import com.pnc.masters.security.api.AdminUserGroupResponse;
 import com.pnc.masters.security.api.AdminUserCreateRequest;
 import com.pnc.masters.security.api.AdminUserResponse;
 import com.pnc.masters.security.api.AdminUserUpdateRequest;
-import com.pnc.masters.security.api.DuplicateEmailException;
 import com.pnc.masters.security.api.EmployeeGroupValidationException;
 import com.pnc.masters.security.api.RoleConflictException;
 import com.pnc.masters.security.api.RoleNotFoundException;
 import com.pnc.masters.security.api.UserEnabledRequest;
 import com.pnc.masters.security.api.UserNotFoundException;
 import com.pnc.masters.security.api.UserRolesRequest;
+import com.pnc.masters.security.api.UserValidationException;
+import com.pnc.masters.security.api.UsernameTakenException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,10 +24,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 @Transactional
 public class UserAdminService {
+
+    private static final Pattern NAME = Pattern.compile("^[A-Za-z0-9]+(?:[.\\-][A-Za-z0-9]+)*$");
+    private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final AppUserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -50,18 +55,16 @@ public class UserAdminService {
 
     @Transactional(readOnly = true)
     public List<AdminUserResponse> findAll() {
-        List<AppUser> users = userRepository.findAllByOrderByEmailAsc();
+        List<AppUser> users = userRepository.findAllByOrderByDisplayNameAsc();
         Map<Long, List<AdminUserGroupResponse>> membership = groupsFor(users.stream().map(AppUser::getUserId).toList());
         return users.stream().map(user -> toResponse(user, membership.getOrDefault(user.getUserId(), List.of()))).toList();
     }
 
     public AdminUserResponse create(AdminUserCreateRequest request) {
-        String email = normalizeEmail(request.email());
-        if (userRepository.existsByEmailIgnoreCase(email)) {
-            throw new DuplicateEmailException(email);
-        }
+        String username = requireUsername(request.username(), null);
         AppUser user = new AppUser();
-        user.setEmail(email);
+        user.setUsername(username);
+        user.setEmail(optionalEmail(request.email()));
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setDisplayName(request.displayName().trim());
         user.setEnabled(request.enabled() == null || request.enabled());
@@ -84,11 +87,8 @@ public class UserAdminService {
 
     public AdminUserResponse update(Long userId, AdminUserUpdateRequest request) {
         AppUser user = getUser(userId);
-        String email = normalizeEmail(request.email());
-        if (!email.equalsIgnoreCase(user.getEmail()) && userRepository.existsByEmailIgnoreCase(email)) {
-            throw new DuplicateEmailException(email);
-        }
-        user.setEmail(email);
+        user.setUsername(requireUsername(request.username(), user));
+        user.setEmail(optionalEmail(request.email()));
         user.setDisplayName(request.displayName().trim());
         applyProfile(
                 user,
@@ -183,8 +183,48 @@ public class UserAdminService {
         user.setContactNumber(blankToNull(contactNumber));
     }
 
-    private static String normalizeEmail(String email) {
-        return email.trim().toLowerCase(Locale.ROOT);
+    private String requireUsername(String raw, AppUser current) {
+        String username = raw == null ? "" : raw.trim().replaceAll("\\s+", " ");
+        if (username.isEmpty()) {
+            throw new UserValidationException("Enter a username.");
+        }
+        if (current != null && username.equalsIgnoreCase(current.getUsername())) {
+            return current.getUsername();
+        }
+        if (username.length() > 80 || !NAME.matcher(username).matches()) {
+            throw new UserValidationException("Use a name made of letters, numbers, dots, or hyphens.");
+        }
+        if (taken(username, current)) {
+            throw new UsernameTakenException(username + " is already taken. Try " + nextFree(username, current) + ".");
+        }
+        return username;
+    }
+
+    private String nextFree(String username, AppUser current) {
+        for (int suffix = 2; suffix < 1000; suffix++) {
+            String candidate = username + suffix;
+            if (!taken(candidate, current)) {
+                return candidate;
+            }
+        }
+        return username + " 2";
+    }
+
+    private boolean taken(String username, AppUser current) {
+        return userRepository.findByUsernameIgnoreCase(username)
+                .filter(found -> current == null || !found.getUserId().equals(current.getUserId()))
+                .isPresent();
+    }
+
+    private static String optionalEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        String value = email.trim().toLowerCase(Locale.ROOT);
+        if (value.length() > 320 || !EMAIL.matcher(value).matches()) {
+            throw new UserValidationException("Enter a valid email.");
+        }
+        return value;
     }
 
     private static String blankToNull(String value) {
@@ -259,6 +299,7 @@ public class UserAdminService {
     private AdminUserResponse toResponse(AppUser user, List<AdminUserGroupResponse> groups) {
         return new AdminUserResponse(
                 user.getUserId(),
+                user.getUsername(),
                 user.getEmail(),
                 user.getDisplayName(),
                 user.isEnabled(),

@@ -2,8 +2,9 @@ package com.pnc.masters.security;
 
 import com.pnc.masters.security.api.AdminUserCreateRequest;
 import com.pnc.masters.security.api.AdminUserUpdateRequest;
-import com.pnc.masters.security.api.DuplicateEmailException;
 import com.pnc.masters.security.api.RoleConflictException;
+import com.pnc.masters.security.api.UserValidationException;
+import com.pnc.masters.security.api.UsernameTakenException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,9 +41,9 @@ class UserAdminServiceTest {
     }
 
     @Test
-    void createStoresNormalizedEmailProfileAndDefaultUserRole() {
+    void createStoresNameAsUsernameAndOptionalEmail() {
         Role userRole = role("USER");
-        when(userRepository.existsByEmailIgnoreCase("ada@example.com")).thenReturn(false);
+        when(userRepository.findByUsernameIgnoreCase("JohnSmith")).thenReturn(Optional.empty());
         when(roleRepository.findByRoleCodeIgnoreCase("USER")).thenReturn(Optional.of(userRole));
         when(passwordEncoder.encode("Secret123")).thenReturn("hash");
         when(userRepository.save(any(AppUser.class))).thenAnswer(invocation -> {
@@ -52,6 +53,7 @@ class UserAdminServiceTest {
         });
 
         var response = service.create(new AdminUserCreateRequest(
+                "  JohnSmith ",
                 "  Ada@Example.com ",
                 "Secret123",
                 "Ada Lovelace",
@@ -69,6 +71,7 @@ class UserAdminServiceTest {
         ));
 
         assertThat(response.userId()).isEqualTo(12L);
+        assertThat(response.username()).isEqualTo("JohnSmith");
         assertThat(response.email()).isEqualTo("ada@example.com");
         assertThat(response.roles()).containsExactly("USER");
         assertThat(response.department()).isEqualTo("Engineering");
@@ -80,18 +83,43 @@ class UserAdminServiceTest {
     }
 
     @Test
-    void createRejectsDuplicateEmail() {
-        when(userRepository.existsByEmailIgnoreCase("ada@example.com")).thenReturn(true);
+    void createSuggestsTheNextFreeName() {
+        when(userRepository.findByUsernameIgnoreCase(any())).thenAnswer(invocation -> {
+            String name = invocation.getArgument(0);
+            if ("JohnSmith".equalsIgnoreCase(name) || "JohnSmith2".equalsIgnoreCase(name)) {
+                AppUser taken = new AppUser();
+                taken.setUserId(1L);
+                taken.setUsername(name);
+                return Optional.of(taken);
+            }
+            return Optional.empty();
+        });
 
         assertThatThrownBy(() -> service.create(new AdminUserCreateRequest(
-                "ada@example.com",
+                "JohnSmith",
+                null,
                 "Secret123",
-                "Ada",
+                "John Smith",
                 List.of(),
                 true,
                 null, null, null, null, null, null, null, null,
                 null
-        ))).isInstanceOf(DuplicateEmailException.class);
+        ))).isInstanceOf(UsernameTakenException.class)
+                .hasMessage("JohnSmith is already taken. Try JohnSmith3.");
+    }
+
+    @Test
+    void createRejectsAUsernameWithASpace() {
+        assertThatThrownBy(() -> service.create(new AdminUserCreateRequest(
+                "John Smith",
+                null,
+                "Secret123",
+                "John Smith",
+                List.of(),
+                true,
+                null, null, null, null, null, null, null, null,
+                null
+        ))).isInstanceOf(UserValidationException.class);
     }
 
     @Test
@@ -103,6 +131,7 @@ class UserAdminServiceTest {
         when(userRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = service.update(12L, new AdminUserUpdateRequest(
+                "ada@example.com",
                 "ada@example.com",
                 "Newpass12",
                 "Ada L",
@@ -135,6 +164,7 @@ class UserAdminServiceTest {
 
         assertThatThrownBy(() -> service.update(1L, new AdminUserUpdateRequest(
                 "admin@example.com",
+                "admin@example.com",
                 null,
                 "Admin",
                 List.of("USER"),
@@ -153,6 +183,7 @@ class UserAdminServiceTest {
 
         assertThatThrownBy(() -> service.update(12L, new AdminUserUpdateRequest(
                 "ada@example.com",
+                "ada@example.com",
                 null,
                 "Ada",
                 List.of("USER"),
@@ -167,6 +198,7 @@ class UserAdminServiceTest {
         AppUser user = new AppUser();
         user.setUserId(id);
         user.setEmail(email);
+        user.setUsername(email);
         user.setDisplayName(name);
         user.setEnabled(enabled);
         user.setRoles(roles);

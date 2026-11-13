@@ -52,6 +52,15 @@ public class SubConfigEntry {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_by", length = 200)
+    private String updatedBy;
+
+    @Column(name = "updated_by_user_id")
+    private Long updatedByUserId;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     @PrePersist
     void setCreatedAt() {
         if (createdAt == null) {
@@ -97,4 +106,10 @@ public class SubConfigEntry {
     public void setCreatedByUserId(Long createdByUserId) { this.createdByUserId = createdByUserId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
+    public Long getUpdatedByUserId() { return updatedByUserId; }
+    public void setUpdatedByUserId(Long updatedByUserId) { this.updatedByUserId = updatedByUserId; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

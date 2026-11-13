@@ -10,6 +10,7 @@ import com.pnc.masters.configuration.api.SubConfigurationEntryRequest;
 import com.pnc.masters.configuration.api.SubConfigurationEntryResponse;
 import com.pnc.masters.configuration.api.SubConfigurationTypeRequest;
 import com.pnc.masters.configuration.api.SubConfigurationTypeResponse;
+import com.pnc.masters.configuration.api.SubConfigurationValidationException;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -20,10 +21,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
+import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/v1/configurations")
@@ -44,12 +48,25 @@ public class AppConfigurationController {
     }
 
     @GetMapping
-    public ConfigurationBundleResponse findAll() {
+    public ConfigurationBundleResponse findAll(@RequestParam(name = "module", required = false) String module) {
+        String scope = scope(module);
+        boolean withSettings = scope == null || "QUOTE".equals(scope);
         return new ConfigurationBundleResponse(
-                configurationService.findAll(),
-                subConfigurationService.findAllTypes(),
-                faiConfigService.find()
+                withSettings ? configurationService.findAll() : List.of(),
+                subConfigurationService.findTypes(scope),
+                withSettings ? faiConfigService.find() : null
         );
+    }
+
+    private static String scope(String module) {
+        if (module == null || module.isBlank() || "ALL".equalsIgnoreCase(module.trim())) {
+            return null;
+        }
+        String code = module.trim().toUpperCase(Locale.ROOT);
+        if (!code.matches("[A-Z][A-Z0-9_]{0,49}")) {
+            throw new SubConfigurationValidationException("Unknown module.");
+        }
+        return code;
     }
 
     @GetMapping("/fai")
@@ -67,8 +84,12 @@ public class AppConfigurationController {
     }
 
     @PostMapping
-    public ResponseEntity<ConfigurationResponse> create(@Valid @RequestBody ConfigurationCreateRequest request) {
-        ConfigurationResponse response = configurationService.create(request);
+    public ResponseEntity<ConfigurationResponse> create(
+            @Valid @RequestBody ConfigurationCreateRequest request,
+            Authentication authentication
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        ConfigurationResponse response = configurationService.create(request, userId);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{key}")
                 .buildAndExpand(response.configKey()).toUri();
         return ResponseEntity.created(location).body(response);
@@ -89,9 +110,11 @@ public class AppConfigurationController {
     @PutMapping("/types/{typeId}")
     public SubConfigurationTypeResponse updateType(
             @PathVariable Long typeId,
-            @Valid @RequestBody SubConfigurationTypeRequest request
+            @Valid @RequestBody SubConfigurationTypeRequest request,
+            Authentication authentication
     ) {
-        return subConfigurationService.updateType(typeId, request);
+        Long userId = (Long) authentication.getPrincipal();
+        return subConfigurationService.updateType(typeId, request, userId);
     }
 
     @PostMapping("/types/{typeId}/entries")
@@ -111,9 +134,11 @@ public class AppConfigurationController {
     public SubConfigurationEntryResponse updateEntry(
             @PathVariable Long typeId,
             @PathVariable Long entryId,
-            @Valid @RequestBody SubConfigurationEntryRequest request
+            @Valid @RequestBody SubConfigurationEntryRequest request,
+            Authentication authentication
     ) {
-        return subConfigurationService.updateEntry(typeId, entryId, request);
+        Long userId = (Long) authentication.getPrincipal();
+        return subConfigurationService.updateEntry(typeId, entryId, request, userId);
     }
 
     @DeleteMapping("/types/{typeId}/entries/{entryId}")
@@ -125,9 +150,11 @@ public class AppConfigurationController {
     @PutMapping("/{key:.+}")
     public ConfigurationResponse update(
             @PathVariable String key,
-            @Valid @RequestBody ConfigurationUpdateRequest request
+            @Valid @RequestBody ConfigurationUpdateRequest request,
+            Authentication authentication
     ) {
-        return configurationService.update(key, request);
+        Long userId = (Long) authentication.getPrincipal();
+        return configurationService.update(key, request, userId);
     }
 
     @DeleteMapping("/{key:.+}")

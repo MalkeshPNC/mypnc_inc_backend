@@ -110,7 +110,8 @@ class QuoteEmailServiceTest {
                 "buyer@example.com",
                 "sales@example.com",
                 "A100 Q-100",
-                "<p>Hello</p><script>alert(1)</script>"));
+                "<p>Hello</p><script>alert(1)</script>",
+                null));
 
         ArgumentCaptor<QuoteEmailOutbox> saved = ArgumentCaptor.forClass(QuoteEmailOutbox.class);
         verify(outbox).save(saved.capture());
@@ -146,7 +147,7 @@ class QuoteEmailServiceTest {
             return row;
         });
 
-        service.enqueue(4L, 9L, new QuoteEmailRequest("buyer@example.com", "", "A100 Q-100", "<p>Hello</p>"));
+        service.enqueue(4L, 9L, new QuoteEmailRequest("buyer@example.com", "", "A100 Q-100", "<p>Hello</p>", null));
 
         ArgumentCaptor<QuoteEmailFile> saved = ArgumentCaptor.forClass(QuoteEmailFile.class);
         verify(emailFiles).save(saved.capture());
@@ -163,10 +164,30 @@ class QuoteEmailServiceTest {
         when(storage.open("quote-pdf/Q-100/Quote-Q-100.pdf")).thenThrow(new NoSuchFileException("missing"));
 
         assertThatThrownBy(() -> service.enqueue(4L, 9L, new QuoteEmailRequest(
-                "buyer@example.com", "", "A100 Q-100", "<p>Hello</p>")))
+                "buyer@example.com", "", "A100 Q-100", "<p>Hello</p>", true)))
                 .isInstanceOf(QuoteValidationException.class)
                 .hasMessage("Save the quote PDF before sending the email.");
         verify(outbox, never()).save(any());
+    }
+
+    @Test
+    void queuesFeedbackWithoutAPdf() throws Exception {
+        Quote quote = quote();
+        quote.setLaborOnly(true);
+        when(quotes.findByQidAndIsDeletedFalse(4L)).thenReturn(Optional.of(quote));
+        when(outbox.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.enqueue(4L, 9L, new QuoteEmailRequest(
+                "buyer@example.com", "", "A100 Q-100", "<p>Hello</p>", false));
+
+        ArgumentCaptor<QuoteEmailOutbox> saved = ArgumentCaptor.forClass(QuoteEmailOutbox.class);
+        verify(outbox).save(saved.capture());
+        assertThat(saved.getValue().getPdfContent()).isNull();
+        assertThat(saved.getValue().getAttachmentName()).isEmpty();
+        assertThat(saved.getValue().getHtmlBody()).contains("Hello");
+        verify(storage, never()).open(any());
+        verify(quoteAttachments, never()).findByQidAndCategoryOrderByAttachmentIdAsc(any(), any());
+        verify(emailFiles, never()).save(any());
     }
 
     @Test

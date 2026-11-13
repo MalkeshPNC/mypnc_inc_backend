@@ -7,6 +7,9 @@ public record SubConfigurationEntryResponse(
         Long entryId,
         List<String> values,
         String createdBy,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String updatedBy,
+        Long updatedByUserId,
+        LocalDateTime updatedAt
 ) {
 }

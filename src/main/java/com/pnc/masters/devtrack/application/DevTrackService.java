@@ -270,15 +270,15 @@ public class DevTrackService {
         if (name == null) {
             throw new DevTrackValidationException("Task name is required");
         }
-        if (request.eta() == null) {
-            throw new DevTrackValidationException("ETA is required");
-        }
         String status = request.status() == null ? "" : request.status().trim().toUpperCase(Locale.ROOT);
         if (status.isEmpty()) {
             status = DevTrack.CREATED;
         }
         if (!STATUSES.contains(status)) {
             throw new DevTrackValidationException("Status must be Created, In-Process, or Done");
+        }
+        if (!DevTrack.CREATED.equals(status) && request.eta() == null) {
+            throw new DevTrackValidationException("ETA is required unless the status is Created");
         }
         row.setName(name);
         row.setDescription(clean(request.description(), DESCRIPTION_LIMIT, "Description"));

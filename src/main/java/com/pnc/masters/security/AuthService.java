@@ -37,7 +37,7 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        AppUser user = userRepository.findByEmailIgnoreCase(request.email().trim())
+        AppUser user = userRepository.findByUsernameIgnoreCase(request.username().trim())
                 .orElseThrow(InvalidCredentialsException::new);
         if (!user.isEnabled() || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new InvalidCredentialsException();
@@ -67,7 +67,11 @@ public class AuthService {
 
     AuthResponse toAuthResponse(AppUser user) {
         AuthUserResponse profile = toUserResponse(user);
-        String token = jwtService.createToken(user.getUserId(), user.getEmail(), profile.roles());
+        String token = jwtService.createToken(
+                user.getUserId(),
+                user.getEmail() == null || user.getEmail().isBlank() ? user.getUsername() : user.getEmail(),
+                profile.roles()
+        );
         return new AuthResponse(token, "Bearer", jwtService.expirationMs(), profile);
     }
 
@@ -76,7 +80,7 @@ public class AuthService {
                 .map(Role::getRoleCode)
                 .sorted()
                 .toList();
-        return new AuthUserResponse(user.getUserId(), user.getEmail(), user.getDisplayName(), roles);
+        return new AuthUserResponse(user.getUserId(), user.getUsername(), user.getEmail(), user.getDisplayName(), roles);
     }
 
     static ProfileResponse toProfileResponse(AppUser user) {

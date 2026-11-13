@@ -29,7 +29,7 @@ public class DevTrack {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "eta", nullable = false)
+    @Column(name = "eta")
     private LocalDate eta;
 
     @Column(name = "status", nullable = false, length = 20)

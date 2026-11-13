@@ -19,6 +19,8 @@ class ModuleAccessPolicyTest {
     @Test
     void quoteWritesNeedWriteAndReadsNeedRead() {
         assertEquals(module("QUOTE", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/quotes"));
+        assertEquals(module("QUOTE", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/pcb-inventory"));
+        assertEquals(module("QUOTE", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/pcb-inventory/4/transactions"));
         assertEquals(module("QUOTE", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("DELETE", "/api/v1/quotes/4"));
         assertEquals(module("QUOTE", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/quotes/4/lock/takeover"));
         assertEquals(module("REPORTS", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/quotes/report"));
@@ -30,7 +32,12 @@ class ModuleAccessPolicyTest {
     @Test
     void configurationBootstrapStaysOpenAndChangesNeedWrite() {
         assertEquals(AccessDecision.open(), ModuleAccessPolicy.decide("GET", "/api/v1/configurations"));
-        assertEquals(module("CONFIGURATION", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/configurations/fai"));
+        assertEquals(module("CONFIG_FAI", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/configurations/fai"));
+        assertEquals(module("CONFIG_FAI", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/configurations/fai"));
+        assertEquals(module("CONFIG_MASTERS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/configurations/types"));
+        assertEquals(module("CONFIG_MASTERS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/configurations/types/3/entries/9"));
+        assertEquals(module("CONFIG_SETTINGS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/configurations"));
+        assertEquals(module("CONFIG_SETTINGS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/configurations/quote.pdf.note"));
     }
 
     @Test
@@ -60,6 +67,9 @@ class ModuleAccessPolicyTest {
         assertEquals(module("DEVELOPMENT_TRACK", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/development-track/4/files/2"));
         assertEquals(module("DEVELOPMENT_TRACK", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/development-track"));
         assertEquals(module("DEVELOPMENT_TRACK", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/development-track/4/comments"));
+        assertEquals(module("VENDORS", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/vendors"));
+        assertEquals(module("VENDORS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/vendors"));
+        assertEquals(module("VENDORS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("DELETE", "/api/v1/manufacturers/3"));
         assertEquals(AccessDecision.open(), ModuleAccessPolicy.decide("GET", "/api/v1/documents/10/content"));
     }
 

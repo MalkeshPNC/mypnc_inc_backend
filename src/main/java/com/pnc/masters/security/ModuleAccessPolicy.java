@@ -26,8 +26,14 @@ public final class ModuleAccessPolicy {
         if ("/api/v1/configurations".equals(uri) && !isWrite(http)) {
             return AccessDecision.open();
         }
+        if ("/api/v1/configurations/fai".equals(uri)) {
+            return AccessDecision.module("CONFIG_FAI", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+        }
+        if (uri.startsWith("/api/v1/configurations/types")) {
+            return AccessDecision.module("CONFIG_MASTERS", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+        }
         if (uri.startsWith("/api/v1/configurations")) {
-            return AccessDecision.module("CONFIGURATION", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+            return AccessDecision.module("CONFIG_SETTINGS", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
         }
         if ("/api/v1/quotes/customer-summary".equals(uri)) {
             return AccessDecision.superAdmin();
@@ -37,6 +43,9 @@ public final class ModuleAccessPolicy {
         }
         if ("/api/v1/quotes/referred-summary".equals(uri)) {
             return AccessDecision.any(ModuleAccessLevel.READ, "QUOTE", "REPORTS");
+        }
+        if (uri.startsWith("/api/v1/pcb-inventory")) {
+            return AccessDecision.module("QUOTE", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
         }
         if (uri.startsWith("/api/v1/quotes") || uri.startsWith("/api/v1/nc-masters")) {
             return AccessDecision.module("QUOTE", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
@@ -61,6 +70,9 @@ public final class ModuleAccessPolicy {
         }
         if (uri.startsWith("/api/v1/development-track")) {
             return AccessDecision.module("DEVELOPMENT_TRACK", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+        }
+        if (uri.startsWith("/api/v1/vendors") || uri.startsWith("/api/v1/manufacturers")) {
+            return AccessDecision.module("VENDORS", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
         }
         if (uri.startsWith("/api/v1/employee-groups")) {
             return AccessDecision.module("SECURITY", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);

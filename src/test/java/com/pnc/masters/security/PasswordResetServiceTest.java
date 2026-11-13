@@ -46,7 +46,7 @@ class PasswordResetServiceTest {
 
     @Test
     void forgotPasswordAlwaysReturnsGenericMessage() {
-        when(userRepository.findByEmailIgnoreCase("missing@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findAllByEmailIgnoreCase("missing@example.com")).thenReturn(List.of());
 
         var response = service.forgotPassword(new ForgotPasswordRequest("missing@example.com"));
 
@@ -57,7 +57,7 @@ class PasswordResetServiceTest {
     @Test
     void forgotPasswordIssuesTokenForEnabledUser() {
         AppUser user = enabledUser();
-        when(userRepository.findByEmailIgnoreCase("ada@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findAllByEmailIgnoreCase("ada@example.com")).thenReturn(List.of(user));
         when(tokenRepository.findByUserAndUsedAtIsNull(user)).thenReturn(List.of());
         when(tokenRepository.save(any(PasswordResetToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -66,6 +66,16 @@ class PasswordResetServiceTest {
         ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
         verify(notifier).sendResetLink(org.mockito.ArgumentMatchers.eq("ada@example.com"), url.capture());
         assertThat(url.getValue()).startsWith("http://localhost:4200/reset-password?token=");
+    }
+
+    @Test
+    void forgotPasswordSkipsASharedEmail() {
+        when(userRepository.findAllByEmailIgnoreCase("shared@example.com"))
+                .thenReturn(List.of(enabledUser(), enabledUser()));
+
+        service.forgotPassword(new ForgotPasswordRequest("shared@example.com"));
+
+        verify(notifier, never()).sendResetLink(anyString(), anyString());
     }
 
     @Test

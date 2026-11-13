@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 
 @Service
@@ -47,9 +48,12 @@ public class PasswordResetService {
 
     public MessageResponse forgotPassword(ForgotPasswordRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
-        userRepository.findByEmailIgnoreCase(email)
+        List<AppUser> matches = userRepository.findAllByEmailIgnoreCase(email).stream()
                 .filter(AppUser::isEnabled)
-                .ifPresent(this::issueResetToken);
+                .toList();
+        if (matches.size() == 1) {
+            issueResetToken(matches.getFirst());
+        }
         return new MessageResponse(GENERIC_MESSAGE);
     }
 

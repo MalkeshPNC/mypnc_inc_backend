@@ -123,8 +123,9 @@ public class QuoteEmailService {
         if (QuoteEmailHtml.isBlank(html)) {
             throw new QuoteValidationException("Enter a message.");
         }
-        byte[] pdf = readStored(quote);
-        List<QuoteEmailFile> notes = pNotesFor(quote);
+        boolean includePdf = request.includePdf();
+        byte[] pdf = includePdf ? readStored(quote) : null;
+        List<QuoteEmailFile> notes = includePdf ? pNotesFor(quote) : List.of();
         QuoteEmailOutbox row = new QuoteEmailOutbox();
         row.setQuoteId(quote.getQid());
         row.setQuoteNumber(quote.getQuoteNumber() == null ? "" : quote.getQuoteNumber());
@@ -134,7 +135,7 @@ public class QuoteEmailService {
         row.setCcRecipients(cc.isEmpty() ? null : String.join(", ", cc));
         row.setSubject(subject);
         row.setHtmlBody(html);
-        row.setAttachmentName(QuotePdfNames.fileName(quote.getQuoteNumber(), quote.getQid()));
+        row.setAttachmentName(includePdf ? QuotePdfNames.fileName(quote.getQuoteNumber(), quote.getQid()) : "");
         row.setPdfContent(pdf);
         row.setStatus(QuoteEmailOutbox.QUEUED);
         row.setCreatedAt(LocalDateTime.now(clock));

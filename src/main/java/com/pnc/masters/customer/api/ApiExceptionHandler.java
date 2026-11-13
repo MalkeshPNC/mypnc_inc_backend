@@ -19,6 +19,11 @@ import com.pnc.masters.devtrack.api.DevTrackValidationException;
 import com.pnc.masters.document.api.DocumentNotFoundException;
 import com.pnc.masters.document.api.DocumentValidationException;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
+import com.pnc.masters.party.api.PartyCodeExistsException;
+import com.pnc.masters.party.api.PartyNotFoundException;
+import com.pnc.masters.party.api.PartyValidationException;
+import com.pnc.masters.pcbinventory.api.PcbInventoryNotFoundException;
+import com.pnc.masters.pcbinventory.api.PcbInventoryValidationException;
 import com.pnc.masters.ncmaster.api.NcMasterValidationException;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
 import com.pnc.masters.quote.api.QuoteLockedException;
@@ -32,6 +37,8 @@ import com.pnc.masters.task.api.TaskForbiddenException;
 import com.pnc.masters.task.api.TaskValidationException;
 import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
 import com.pnc.masters.security.api.DuplicateEmailException;
+import com.pnc.masters.security.api.UserValidationException;
+import com.pnc.masters.security.api.UsernameTakenException;
 import com.pnc.masters.security.api.EmployeeGroupNotFoundException;
 import com.pnc.masters.security.api.EmployeeGroupValidationException;
 import com.pnc.masters.security.api.InvalidCredentialsException;
@@ -116,6 +123,16 @@ public class ApiExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
     }
 
+    @ExceptionHandler(PcbInventoryNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handlePcbInventoryNotFound(PcbInventoryNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PcbInventoryValidationException.class)
+    public ResponseEntity<Map<String, Object>> handlePcbInventoryValidation(PcbInventoryValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
     @ExceptionHandler(EmployeeGroupNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleEmployeeGroupNotFound(EmployeeGroupNotFoundException exception) {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
@@ -124,6 +141,21 @@ public class ApiExceptionHandler {
     @ExceptionHandler(EmployeeGroupValidationException.class)
     public ResponseEntity<Map<String, Object>> handleEmployeeGroupValidation(EmployeeGroupValidationException exception) {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PartyNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handlePartyNotFound(PartyNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PartyValidationException.class)
+    public ResponseEntity<Map<String, Object>> handlePartyValidation(PartyValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PartyCodeExistsException.class)
+    public ResponseEntity<Map<String, Object>> handlePartyCodeExists(PartyCodeExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(TaskNotFoundException.class)
@@ -222,6 +254,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DuplicateEmailException.class)
     public ResponseEntity<Map<String, Object>> handleDuplicateEmail(DuplicateEmailException exception) {
         return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(UsernameTakenException.class)
+    public ResponseEntity<Map<String, Object>> handleUsernameTaken(UsernameTakenException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(UserValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleUserValidation(UserValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(RoleNotFoundException.class)

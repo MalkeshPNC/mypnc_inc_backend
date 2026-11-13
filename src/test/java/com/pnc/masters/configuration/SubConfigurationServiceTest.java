@@ -3,6 +3,7 @@ package com.pnc.masters.configuration;
 import com.pnc.masters.configuration.api.SubConfigurationEntryRequest;
 import com.pnc.masters.configuration.api.SubConfigurationTypeExistsException;
 import com.pnc.masters.configuration.api.SubConfigurationTypeRequest;
+import com.pnc.masters.configuration.api.SubConfigurationTypeResponse;
 import com.pnc.masters.configuration.api.SubConfigurationValidationException;
 import com.pnc.masters.security.AppUser;
 import com.pnc.masters.security.AppUserRepository;
@@ -19,6 +20,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +30,7 @@ class SubConfigurationServiceTest {
     @Mock private SubConfigTypeRepository typeRepository;
     @Mock private SubConfigEntryRepository entryRepository;
     @Mock private AppUserRepository userRepository;
+    @Mock private MasterEntryUsage entryUsage;
 
     @InjectMocks
     private SubConfigurationService service;
@@ -48,10 +51,12 @@ class SubConfigurationServiceTest {
         var response = service.createType(new SubConfigurationTypeRequest(
                 "Department",
                 "Department",
-                List.of("Name", "Code")
+                List.of("Name", "Code"),
+                "quote"
         ), 7L);
 
         assertThat(response.typeCode()).isEqualTo("department");
+        assertThat(response.moduleCode()).isEqualTo("QUOTE");
         assertThat(response.fieldLabels()).containsExactly("Name", "Code");
         assertThat(response.entries()).isEmpty();
         ArgumentCaptor<SubConfigType> captor = ArgumentCaptor.forClass(SubConfigType.class);
@@ -59,6 +64,7 @@ class SubConfigurationServiceTest {
         assertThat(captor.getValue().getFieldLabel(1)).isEqualTo("Name");
         assertThat(captor.getValue().getFieldLabel(2)).isEqualTo("Code");
         assertThat(captor.getValue().getFieldLabel(3)).isNull();
+        assertThat(captor.getValue().getModuleCode()).isEqualTo("QUOTE");
         assertThat(captor.getValue().getCreatedBy()).isEqualTo("Ada Lovelace");
     }
 
@@ -67,7 +73,7 @@ class SubConfigurationServiceTest {
         when(typeRepository.existsByTypeCodeIgnoreCase("department")).thenReturn(true);
 
         assertThatThrownBy(() -> service.createType(
-                new SubConfigurationTypeRequest("department", "Department", List.of("Name")),
+                new SubConfigurationTypeRequest("department", "Department", List.of("Name"), null),
                 1L
         )).isInstanceOf(SubConfigurationTypeExistsException.class);
     }
@@ -115,16 +121,19 @@ class SubConfigurationServiceTest {
         when(typeRepository.findById(3L)).thenReturn(Optional.of(type));
         when(typeRepository.save(any(SubConfigType.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(entryRepository.findByTypeTypeIdOrderByCreatedAtDesc(3L)).thenReturn(List.of(entry));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(editor()));
 
         var response = service.updateType(3L, new SubConfigurationTypeRequest(
                 "ignored",
                 "Group Types",
-                List.of("Name", "Code")
-        ));
+                List.of("Name", "Code"),
+                null
+        ), 7L);
 
         assertThat(response.typeCode()).isEqualTo("group-types");
         assertThat(response.fieldLabels()).containsExactly("Name", "Code");
         assertThat(response.entries().getFirst().values()).containsExactly("Shift", null);
+        assertThat(response.updatedBy()).isEqualTo("Grace");
     }
 
     @Test
@@ -138,8 +147,9 @@ class SubConfigurationServiceTest {
         assertThatThrownBy(() -> service.updateType(3L, new SubConfigurationTypeRequest(
                 "group-types",
                 "Group Types",
-                List.of("Name")
-        ))).isInstanceOf(SubConfigurationValidationException.class)
+                List.of("Name"),
+                null
+        ), 7L)).isInstanceOf(SubConfigurationValidationException.class)
                 .hasMessage("Keep the columns that already exist. You can add a new one.");
     }
 
@@ -156,11 +166,13 @@ class SubConfigurationServiceTest {
         when(typeRepository.findById(3L)).thenReturn(Optional.of(type));
         when(entryRepository.findById(11L)).thenReturn(Optional.of(entry));
         when(entryRepository.save(any(SubConfigEntry.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(editor()));
 
-        var response = service.updateEntry(3L, 11L, new SubConfigurationEntryRequest(List.of("Line")));
+        var response = service.updateEntry(3L, 11L, new SubConfigurationEntryRequest(List.of("Line")), 7L);
 
         assertThat(response.values()).containsExactly("Line");
         assertThat(entry.getCreatedBy()).isEqualTo("Ada");
+        assertThat(entry.getUpdatedBy()).isEqualTo("Grace");
     }
 
     @Test
@@ -190,5 +202,49 @@ class SubConfigurationServiceTest {
         service.deleteEntry(3L, 11L);
 
         verify(entryRepository).delete(entry);
+    }
+
+    @Test
+    void deleteEntryRejectsARowUsedByAVendorOrManufacturer() {
+        SubConfigType type = new SubConfigType();
+        type.setTypeId(3L);
+        SubConfigEntry entry = new SubConfigEntry();
+        entry.setEntryId(11L);
+        entry.setType(type);
+        when(entryRepository.findById(11L)).thenReturn(Optional.of(entry));
+        when(entryUsage.isReferenced(11L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteEntry(3L, 11L))
+                .isInstanceOf(SubConfigurationValidationException.class)
+                .hasMessage("This row is used by a vendor or manufacturer and cannot be removed.");
+    }
+
+    @Test
+    void findTypesKeepsSharedListsAndTheRequestedModule() {
+        SubConfigType shared = new SubConfigType();
+        shared.setTypeId(1L);
+        shared.setTypeCode("shared");
+        shared.setTypeName("Shared");
+        SubConfigType quote = new SubConfigType();
+        quote.setTypeId(2L);
+        quote.setTypeCode("quotetypes");
+        quote.setTypeName("Quote Types");
+        quote.setModuleCode("QUOTE");
+        when(typeRepository.findSharedOrModule("QUOTE")).thenReturn(List.of(shared, quote));
+        when(entryRepository.findByTypeTypeIdOrderByCreatedAtDesc(any())).thenReturn(List.of());
+
+        var types = service.findTypes("QUOTE");
+
+        assertThat(types).extracting(SubConfigurationTypeResponse::typeCode)
+                .containsExactly("shared", "quotetypes");
+        assertThat(types.get(1).moduleCode()).isEqualTo("QUOTE");
+        verify(typeRepository, never()).findAllByOrderByTypeNameAsc();
+    }
+
+    private static AppUser editor() {
+        AppUser user = new AppUser();
+        user.setUserId(7L);
+        user.setDisplayName("Grace");
+        return user;
     }
 }
