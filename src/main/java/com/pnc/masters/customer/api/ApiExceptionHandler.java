@@ -1,0 +1,345 @@
+package com.pnc.masters.customer.api;
+
+import com.pnc.masters.chat.api.ChatConversationNotFoundException;
+import com.pnc.masters.chat.api.ChatForbiddenException;
+import com.pnc.masters.chat.api.ChatMessageValidationException;
+import com.pnc.masters.chat.api.ChatPeerNotFoundException;
+import com.pnc.masters.chat.api.ChatRateLimitedException;
+import com.pnc.masters.configuration.api.ConfigurationKeyExistsException;
+import com.pnc.masters.configuration.api.ConfigurationNotFoundException;
+import com.pnc.masters.configuration.api.FaiConfigValidationException;
+import com.pnc.masters.configuration.api.SubConfigurationEntryNotFoundException;
+import com.pnc.masters.configuration.api.SubConfigurationTypeExistsException;
+import com.pnc.masters.configuration.api.SubConfigurationTypeNotFoundException;
+import com.pnc.masters.configuration.api.SubConfigurationValidationException;
+import com.pnc.masters.contact.api.ContactNotFoundException;
+import com.pnc.masters.devtrack.api.DevTrackForbiddenException;
+import com.pnc.masters.devtrack.api.DevTrackNotFoundException;
+import com.pnc.masters.devtrack.api.DevTrackValidationException;
+import com.pnc.masters.document.api.DocumentNotFoundException;
+import com.pnc.masters.document.api.DocumentValidationException;
+import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
+import com.pnc.masters.party.api.PartyCodeExistsException;
+import com.pnc.masters.party.api.PartyNotFoundException;
+import com.pnc.masters.party.api.PartyValidationException;
+import com.pnc.masters.pcbinventory.api.PcbInventoryNotFoundException;
+import com.pnc.masters.pcbinventory.api.PcbInventoryValidationException;
+import com.pnc.masters.ncmaster.api.NcMasterValidationException;
+import com.pnc.masters.ncmaster.api.NcNumberExistsException;
+import com.pnc.masters.quote.api.QuoteLockedException;
+import com.pnc.masters.quote.api.QuoteNotFoundException;
+import com.pnc.masters.quote.api.QuoteNumberExistsException;
+import com.pnc.masters.quote.api.QuoteValidationException;
+import com.pnc.masters.quote.api.QuoteEmailLogNotFoundException;
+import com.pnc.masters.salesperson.api.SalesPersonInUseException;
+import com.pnc.masters.task.api.TaskNotFoundException;
+import com.pnc.masters.task.api.TaskForbiddenException;
+import com.pnc.masters.task.api.TaskValidationException;
+import com.pnc.masters.salesperson.api.SalesPersonNotFoundException;
+import com.pnc.masters.security.api.DuplicateEmailException;
+import com.pnc.masters.security.api.UserValidationException;
+import com.pnc.masters.security.api.UsernameTakenException;
+import com.pnc.masters.security.api.EmployeeGroupNotFoundException;
+import com.pnc.masters.security.api.EmployeeGroupValidationException;
+import com.pnc.masters.security.api.InvalidCredentialsException;
+import com.pnc.masters.security.api.ModuleConflictException;
+import com.pnc.masters.security.api.ModuleNotFoundException;
+import com.pnc.masters.security.api.InvalidResetTokenException;
+import com.pnc.masters.security.api.RoleConflictException;
+import com.pnc.masters.security.api.RoleNotFoundException;
+import com.pnc.masters.security.api.UserNotFoundException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+public class ApiExceptionHandler {
+
+    @ExceptionHandler(CustomerNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(CustomerNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ContactNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleContactNotFound(ContactNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SalesPersonNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSalesPersonNotFound(SalesPersonNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SalesPersonInUseException.class)
+    public ResponseEntity<Map<String, Object>> handleSalesPersonInUse(SalesPersonInUseException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DocumentNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleDocumentNotFound(DocumentNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DocumentValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleDocumentValidation(DocumentValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(NcMasterNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNcMasterNotFound(NcMasterNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(NcNumberExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleNcNumberExists(NcNumberExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(NcMasterValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleNcMasterValidation(NcMasterValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteNotFound(QuoteNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteNumberExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteNumberExists(QuoteNumberExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteValidation(QuoteValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PcbInventoryNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handlePcbInventoryNotFound(PcbInventoryNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PcbInventoryValidationException.class)
+    public ResponseEntity<Map<String, Object>> handlePcbInventoryValidation(PcbInventoryValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(EmployeeGroupNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleEmployeeGroupNotFound(EmployeeGroupNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(EmployeeGroupValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleEmployeeGroupValidation(EmployeeGroupValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PartyNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handlePartyNotFound(PartyNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PartyValidationException.class)
+    public ResponseEntity<Map<String, Object>> handlePartyValidation(PartyValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(PartyCodeExistsException.class)
+    public ResponseEntity<Map<String, Object>> handlePartyCodeExists(PartyCodeExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(TaskNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleTaskNotFound(TaskNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(TaskValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleTaskValidation(TaskValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(TaskForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleTaskForbidden(TaskForbiddenException exception) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DevTrackNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleDevTrackNotFound(DevTrackNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DevTrackValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleDevTrackValidation(DevTrackValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DevTrackForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleDevTrackForbidden(DevTrackForbiddenException exception) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteEmailLogNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteEmailLogNotFound(QuoteEmailLogNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(QuoteLockedException.class)
+    public ResponseEntity<Map<String, Object>> handleQuoteLocked(QuoteLockedException exception) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("qid", exception.getQid());
+        if (exception.getLockedByUserId() != null) {
+            details.put("lockedByUserId", exception.getLockedByUserId());
+        }
+        if (exception.getLockedByName() != null) {
+            details.put("lockedByName", exception.getLockedByName());
+        }
+        return response(HttpStatus.CONFLICT, exception.getMessage(), details);
+    }
+
+    @ExceptionHandler(ConfigurationNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleConfigurationNotFound(ConfigurationNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ConfigurationKeyExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleConfigurationKeyExists(ConfigurationKeyExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationTypeNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigTypeNotFound(SubConfigurationTypeNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationEntryNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigEntryNotFound(SubConfigurationEntryNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationTypeExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigTypeExists(SubConfigurationTypeExistsException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(SubConfigurationValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleSubConfigValidation(SubConfigurationValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(FaiConfigValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleFaiConfigValidation(FaiConfigValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidCredentials(InvalidCredentialsException exception) {
+        return response(HttpStatus.UNAUTHORIZED, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(InvalidResetTokenException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidResetToken(InvalidResetTokenException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(DuplicateEmailException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateEmail(DuplicateEmailException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(UsernameTakenException.class)
+    public ResponseEntity<Map<String, Object>> handleUsernameTaken(UsernameTakenException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(UserValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleUserValidation(UserValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(RoleNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleRoleNotFound(RoleNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleUserNotFound(UserNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(RoleConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleRoleConflict(RoleConflictException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ModuleNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleModuleNotFound(ModuleNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ModuleConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleModuleConflict(ModuleConflictException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatConversationNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleChatConversationNotFound(ChatConversationNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatPeerNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleChatPeerNotFound(ChatPeerNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleChatForbidden(ChatForbiddenException exception) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatMessageValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleChatValidation(ChatMessageValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ChatRateLimitedException.class)
+    public ResponseEntity<Map<String, Object>> handleChatRateLimited(ChatRateLimitedException exception) {
+        return response(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleUploadTooLarge(MaxUploadSizeExceededException exception) {
+        return response(HttpStatus.PAYLOAD_TOO_LARGE, "The file is larger than 10 MB.", Map.of());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException exception) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        exception.getBindingResult().getFieldErrors()
+                .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
+        return response(HttpStatus.BAD_REQUEST, "Request validation failed", errors);
+    }
+
+    private ResponseEntity<Map<String, Object>> response(
+            HttpStatus status,
+            String message,
+            Object details
+    ) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", Instant.now());
+        body.put("status", status.value());
+        body.put("error", status.getReasonPhrase());
+        body.put("message", message);
+        body.put("details", details);
+        return ResponseEntity.status(status).body(body);
+    }
+}

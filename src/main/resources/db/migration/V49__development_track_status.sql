@@ -1,0 +1,2 @@
+ALTER TABLE tbldev_tracks
+    ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'CREATED' AFTER eta;

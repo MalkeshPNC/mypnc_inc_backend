@@ -1,0 +1,2 @@
+ALTER TABLE tbldev_tracks
+    ADD COLUMN is_delete TINYINT(1) NOT NULL DEFAULT 0;

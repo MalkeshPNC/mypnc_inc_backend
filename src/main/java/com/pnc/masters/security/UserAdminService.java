@@ -1,0 +1,318 @@
+package com.pnc.masters.security;
+
+import com.pnc.masters.security.api.AdminUserGroupResponse;
+import com.pnc.masters.security.api.AdminUserCreateRequest;
+import com.pnc.masters.security.api.AdminUserResponse;
+import com.pnc.masters.security.api.AdminUserUpdateRequest;
+import com.pnc.masters.security.api.EmployeeGroupValidationException;
+import com.pnc.masters.security.api.RoleConflictException;
+import com.pnc.masters.security.api.RoleNotFoundException;
+import com.pnc.masters.security.api.UserEnabledRequest;
+import com.pnc.masters.security.api.UserNotFoundException;
+import com.pnc.masters.security.api.UserRolesRequest;
+import com.pnc.masters.security.api.UserValidationException;
+import com.pnc.masters.security.api.UsernameTakenException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+@Service
+@Transactional
+public class UserAdminService {
+
+    private static final Pattern NAME = Pattern.compile("^[A-Za-z0-9]+(?:[.\\-][A-Za-z0-9]+)*$");
+    private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+
+    private final AppUserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final EmployeeGroupRepository groups;
+    private final EmployeeGroupMemberRepository members;
+    private final PasswordEncoder passwordEncoder;
+
+    public UserAdminService(
+            AppUserRepository userRepository,
+            RoleRepository roleRepository,
+            EmployeeGroupRepository groups,
+            EmployeeGroupMemberRepository members,
+            PasswordEncoder passwordEncoder
+    ) {
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.groups = groups;
+        this.members = members;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminUserResponse> findAll() {
+        List<AppUser> users = userRepository.findAllByOrderByDisplayNameAsc();
+        Map<Long, List<AdminUserGroupResponse>> membership = groupsFor(users.stream().map(AppUser::getUserId).toList());
+        return users.stream().map(user -> toResponse(user, membership.getOrDefault(user.getUserId(), List.of()))).toList();
+    }
+
+    public AdminUserResponse create(AdminUserCreateRequest request) {
+        String username = requireUsername(request.username(), null);
+        AppUser user = new AppUser();
+        user.setUsername(username);
+        user.setEmail(optionalEmail(request.email()));
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setDisplayName(request.displayName().trim());
+        user.setEnabled(request.enabled() == null || request.enabled());
+        applyProfile(
+                user,
+                request.dateOfJoining(),
+                request.department(),
+                request.branch(),
+                request.homeAddress(),
+                request.dateOfBirth(),
+                request.designation(),
+                request.regularTiming(),
+                request.contactNumber()
+        );
+        user.setRoles(resolveRoles(request.roles(), true));
+        AppUser saved = userRepository.save(user);
+        replaceGroups(saved.getUserId(), request.groupIds() == null ? List.of() : request.groupIds());
+        return toResponse(saved);
+    }
+
+    public AdminUserResponse update(Long userId, AdminUserUpdateRequest request) {
+        AppUser user = getUser(userId);
+        user.setUsername(requireUsername(request.username(), user));
+        user.setEmail(optionalEmail(request.email()));
+        user.setDisplayName(request.displayName().trim());
+        applyProfile(
+                user,
+                request.dateOfJoining(),
+                request.department(),
+                request.branch(),
+                request.homeAddress(),
+                request.dateOfBirth(),
+                request.designation(),
+                request.regularTiming(),
+                request.contactNumber()
+        );
+        if (request.password() != null && !request.password().isBlank()) {
+            user.setPasswordHash(passwordEncoder.encode(request.password()));
+        }
+        if (request.roles() != null) {
+            applyRoles(user, resolveRoles(request.roles(), false));
+        }
+        if (request.enabled() != null) {
+            applyEnabled(user, request.enabled());
+        }
+        if (request.groupIds() != null) {
+            replaceGroups(user.getUserId(), request.groupIds());
+        }
+        return toResponse(userRepository.save(user));
+    }
+
+    public AdminUserResponse setEnabled(Long userId, UserEnabledRequest request) {
+        AppUser user = getUser(userId);
+        applyEnabled(user, request.enabled());
+        return toResponse(userRepository.save(user));
+    }
+
+    public AdminUserResponse setRoles(Long userId, UserRolesRequest request) {
+        AppUser user = getUser(userId);
+        applyRoles(user, resolveRoles(request.roles(), false));
+        return toResponse(userRepository.save(user));
+    }
+
+    private void applyEnabled(AppUser user, boolean enabled) {
+        if (!enabled && isLastEnabledAdmin(user)) {
+            throw new RoleConflictException("Cannot disable the last enabled administrator");
+        }
+        user.setEnabled(enabled);
+    }
+
+    private void applyRoles(AppUser user, Set<Role> roles) {
+        boolean removingAdmin = hasAdmin(user) && roles.stream().noneMatch(role -> AuthService.ROLE_ADMIN.equals(role.getRoleCode()));
+        if (removingAdmin && isLastEnabledAdmin(user)) {
+            throw new RoleConflictException("Cannot remove ADMIN from the last enabled administrator");
+        }
+        user.setRoles(roles);
+    }
+
+    private Set<Role> resolveRoles(List<String> codes, boolean defaultUserWhenEmpty) {
+        List<String> wanted = codes == null
+                ? List.of()
+                : codes.stream().map(String::trim).filter(code -> !code.isEmpty()).toList();
+        if (wanted.isEmpty()) {
+            if (!defaultUserWhenEmpty) {
+                throw new RoleConflictException("Assign at least one role");
+            }
+            wanted = List.of(AuthService.ROLE_USER);
+        }
+        Set<Role> roles = new LinkedHashSet<>();
+        for (String code : wanted) {
+            Role role = roleRepository.findByRoleCodeIgnoreCase(code)
+                    .orElseThrow(() -> new RoleNotFoundException(code));
+            roles.add(role);
+        }
+        return roles;
+    }
+
+    private static void applyProfile(
+            AppUser user,
+            java.time.LocalDate dateOfJoining,
+            String department,
+            String branch,
+            String homeAddress,
+            java.time.LocalDate dateOfBirth,
+            String designation,
+            String regularTiming,
+            String contactNumber
+    ) {
+        user.setDateOfJoining(dateOfJoining);
+        user.setDepartment(blankToNull(department));
+        user.setBranch(blankToNull(branch));
+        user.setHomeAddress(blankToNull(homeAddress));
+        user.setDateOfBirth(dateOfBirth);
+        user.setDesignation(blankToNull(designation));
+        user.setRegularTiming(blankToNull(regularTiming));
+        user.setContactNumber(blankToNull(contactNumber));
+    }
+
+    private String requireUsername(String raw, AppUser current) {
+        String username = raw == null ? "" : raw.trim().replaceAll("\\s+", " ");
+        if (username.isEmpty()) {
+            throw new UserValidationException("Enter a username.");
+        }
+        if (current != null && username.equalsIgnoreCase(current.getUsername())) {
+            return current.getUsername();
+        }
+        if (username.length() > 80 || !NAME.matcher(username).matches()) {
+            throw new UserValidationException("Use a name made of letters, numbers, dots, or hyphens.");
+        }
+        if (taken(username, current)) {
+            throw new UsernameTakenException(username + " is already taken. Try " + nextFree(username, current) + ".");
+        }
+        return username;
+    }
+
+    private String nextFree(String username, AppUser current) {
+        for (int suffix = 2; suffix < 1000; suffix++) {
+            String candidate = username + suffix;
+            if (!taken(candidate, current)) {
+                return candidate;
+            }
+        }
+        return username + " 2";
+    }
+
+    private boolean taken(String username, AppUser current) {
+        return userRepository.findByUsernameIgnoreCase(username)
+                .filter(found -> current == null || !found.getUserId().equals(current.getUserId()))
+                .isPresent();
+    }
+
+    private static String optionalEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        String value = email.trim().toLowerCase(Locale.ROOT);
+        if (value.length() > 320 || !EMAIL.matcher(value).matches()) {
+            throw new UserValidationException("Enter a valid email.");
+        }
+        return value;
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean isLastEnabledAdmin(AppUser user) {
+        return user.isEnabled() && hasAdmin(user) && userRepository.countEnabledAdmins() <= 1;
+    }
+
+    private static boolean hasAdmin(AppUser user) {
+        return user.getRoles().stream().anyMatch(role -> AuthService.ROLE_ADMIN.equals(role.getRoleCode()));
+    }
+
+    private void replaceGroups(Long userId, List<Long> groupIds) {
+        List<Long> ids = groupIds == null
+                ? List.of()
+                : groupIds.stream().filter(id -> id != null).distinct().toList();
+        if (!ids.isEmpty()) {
+            List<EmployeeGroup> found = groups.findByGroupIdInAndDeletedFalse(ids);
+            if (found.size() != ids.size()) {
+                throw new EmployeeGroupValidationException("Choose a group from the list");
+            }
+        }
+        members.deleteByUserId(userId);
+        members.flush();
+        for (Long groupId : ids) {
+            EmployeeGroupMember row = new EmployeeGroupMember();
+            row.setGroupId(groupId);
+            row.setUserId(userId);
+            members.save(row);
+        }
+    }
+
+    private Map<Long, List<AdminUserGroupResponse>> groupsFor(Collection<Long> userIds) {
+        List<Long> ids = userIds.stream().filter(id -> id != null).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<EmployeeGroupMember> links = members.findByUserIdIn(ids);
+        if (links.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, EmployeeGroup> byId = new HashMap<>();
+        for (EmployeeGroup group : groups.findByGroupIdInAndDeletedFalse(links.stream().map(EmployeeGroupMember::getGroupId).distinct().toList())) {
+            byId.put(group.getGroupId(), group);
+        }
+        Map<Long, List<AdminUserGroupResponse>> membership = new HashMap<>();
+        for (EmployeeGroupMember link : links) {
+            EmployeeGroup group = byId.get(link.getGroupId());
+            if (group == null) {
+                continue;
+            }
+            membership.computeIfAbsent(link.getUserId(), key -> new ArrayList<>())
+                    .add(new AdminUserGroupResponse(group.getGroupId(), group.getName()));
+        }
+        return membership;
+    }
+
+    private AppUser getUser(Long userId) {
+        return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+    }
+
+    private AdminUserResponse toResponse(AppUser user) {
+        return toResponse(user, groupsFor(List.of(user.getUserId())).getOrDefault(user.getUserId(), List.of()));
+    }
+
+    private AdminUserResponse toResponse(AppUser user, List<AdminUserGroupResponse> groups) {
+        return new AdminUserResponse(
+                user.getUserId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getDisplayName(),
+                user.isEnabled(),
+                user.getRoles().stream().map(Role::getRoleCode).sorted().toList(),
+                user.getDateOfJoining(),
+                user.getDepartment(),
+                user.getBranch(),
+                user.getHomeAddress(),
+                user.getDateOfBirth(),
+                user.getDesignation(),
+                user.getRegularTiming(),
+                user.getContactNumber(),
+                groups
+        );
+    }
+}

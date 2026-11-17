@@ -1,0 +1,281 @@
+package com.pnc.masters.customer.application;
+
+import com.pnc.masters.contact.Contact;
+import com.pnc.masters.contact.ContactRepository;
+import com.pnc.masters.customer.Customer;
+import com.pnc.masters.customer.CustomerRepository;
+import com.pnc.masters.customer.api.CustomerNotFoundException;
+import com.pnc.masters.customer.api.CustomerRequest;
+import com.pnc.masters.customer.api.CustomerSalesPersonRequest;
+import com.pnc.masters.customer.api.CustomerResponse;
+import com.pnc.masters.quote.application.CustomerWinRatio;
+import com.pnc.masters.salesperson.SalesPerson;
+import com.pnc.masters.salesperson.SalesPersonRepository;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class CustomerServiceTest {
+
+    @Mock
+    private CustomerRepository customerRepository;
+
+    @Mock
+    private SalesPersonRepository salesPersonRepository;
+
+    @Mock
+    private ContactRepository contactRepository;
+
+    @Mock
+    private CustomerWinRatio customerWinRatio;
+
+    @InjectMocks
+    private CustomerService customerService;
+
+    @Test
+    void createMapsRequestAndPersistsCustomer() {
+        CustomerRequest request = request("Acme Inc");
+        Customer saved = new Customer();
+        saved.setCustId(1L);
+        saved.setCustomer("Acme Inc");
+        SalesPerson salesPerson = new SalesPerson();
+        salesPerson.setSpId(5L);
+        salesPerson.setSalesPerson("Sales Person");
+        when(salesPersonRepository.findById(5L)).thenReturn(Optional.of(salesPerson));
+        when(customerRepository.save(any(Customer.class))).thenReturn(saved);
+
+        CustomerResponse response = customerService.create(request);
+
+        assertThat(response.custId()).isEqualTo(1L);
+        assertThat(response.customer()).isEqualTo("Acme Inc");
+        verify(customerRepository).save(any(Customer.class));
+    }
+
+    @Test
+    void findAllReturnsOnlyActiveCustomers() {
+        Customer active = new Customer();
+        active.setCustId(1L);
+        active.setCustomer("Active customer");
+        when(customerRepository.findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc()).thenReturn(List.of(active));
+
+        List<CustomerResponse> response = customerService.findAll();
+
+        assertThat(response).extracting(CustomerResponse::customer).containsExactly("Active customer");
+        assertThat(response.get(0).companyBlobLogo()).isNull();
+        verify(customerRepository).findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc();
+        verify(customerRepository, never()).findAll();
+        verify(customerRepository, never()).findCompanyBlobLogo(any());
+    }
+
+    @Test
+    void findAllUsesTheFirstContactInListOrder() {
+        Customer active = new Customer();
+        active.setCustId(1L);
+        active.setCustomer("Active customer");
+        when(customerRepository.findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc()).thenReturn(List.of(active));
+        when(contactRepository.findByCustomerCustIdInOrderByContIdAsc(List.of(1L)))
+                .thenReturn(List.of(contact(3L, active, "Ada", "Lovelace"), contact(8L, active, "Zoe", "Ng")));
+
+        List<CustomerResponse> response = customerService.findAll();
+
+        assertThat(response.get(0).contactPerson()).isEqualTo("Ada Lovelace");
+    }
+
+    @Test
+    void findByIdThrowsWhenCustomerDoesNotExist() {
+        when(customerRepository.findByCustIdAndIsDeletedFalse(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> customerService.findById(99L))
+                .isInstanceOf(CustomerNotFoundException.class)
+                .hasMessage("Customer with id 99 was not found");
+    }
+
+    @Test
+    void updateKeepsExistingEntryDateWhenRequestOmitsIt() {
+        LocalDateTime entryDate = LocalDateTime.of(2026, 1, 15, 9, 30);
+        Customer existing = new Customer();
+        existing.setCustId(6L);
+        existing.setCustomer("Acme Inc");
+        existing.setCustEntryDt(entryDate);
+        SalesPerson salesPerson = new SalesPerson();
+        salesPerson.setSpId(5L);
+        salesPerson.setSalesPerson("Sales Person");
+        when(salesPersonRepository.findById(5L)).thenReturn(Optional.of(salesPerson));
+        when(customerRepository.findByCustIdAndIsDeletedFalse(6L)).thenReturn(Optional.of(existing));
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CustomerResponse response = customerService.update(6L, request("Acme Inc"));
+
+        assertThat(existing.getCustEntryDt()).isEqualTo(entryDate);
+        assertThat(response.custEntryDt()).isEqualTo(entryDate);
+    }
+
+    @Test
+    void deleteMarksCustomerDeletedInsteadOfPhysicallyDeletingIt() {
+        Customer customer = new Customer();
+        customer.setCustId(1L);
+        customer.setCustomer("Acme Inc");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(customer));
+
+        customerService.delete(1L);
+
+        assertThat(customer.isDeleted()).isTrue();
+        verify(customerRepository).save(customer);
+        verify(customerRepository, never()).delete(any(Customer.class));
+    }
+
+            @Test
+            void duplicateSalespersonAssignmentsArePersistedOnlyOnce() {
+            CustomerRequest request = new CustomerRequest(
+                "Acme Inc", null,
+                List.of(
+                    new CustomerSalesPersonRequest(5L, new BigDecimal("12.50")),
+                    new CustomerSalesPersonRequest(5L, new BigDecimal("15.00"))
+                ),
+                null, null, null, null, null, null, null, null, null, false, null
+            );
+            SalesPerson salesPerson = new SalesPerson();
+            salesPerson.setSpId(5L);
+            salesPerson.setSalesPerson("Sales Person");
+            when(salesPersonRepository.findById(5L)).thenReturn(Optional.of(salesPerson));
+            Customer saved = new Customer();
+            saved.setCustId(1L);
+            saved.setCustomer("Acme Inc");
+            when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            customerService.create(request);
+
+            org.mockito.ArgumentCaptor<Customer> captor = org.mockito.ArgumentCaptor.forClass(Customer.class);
+            verify(customerRepository).save(captor.capture());
+            assertThat(captor.getValue().getSalesPersons()).hasSize(1);
+            assertThat(captor.getValue().getSalesPersons().get(0).getCommission()).isEqualByComparingTo("15.00");
+            verify(salesPersonRepository).findById(eq(5L));
+            }
+
+    @Test
+    void findByIdKeepsWinRatioOffUnlessTheQuoteFormAsksForIt() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+
+        assertThat(customerService.findById(4L).currentYearWinRatio()).isNull();
+        verify(customerWinRatio, never()).currentYear(any(), any());
+    }
+
+    @Test
+    void findByIdReturnsTheCurrentYearWinRatioWhenRequested() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+        when(customerWinRatio.currentYear(4L, "Acme")).thenReturn(50);
+
+        assertThat(customerService.findById(4L, true).currentYearWinRatio()).isEqualTo(50);
+    }
+
+    @Test
+    void logoBlobIsPreviewOnlyWhenTheLogoFileIsBlank() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+        when(customerRepository.findCompanyBlobLogo(4L)).thenReturn(new byte[] {
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+        });
+
+        CustomerResponse response = customerService.findById(4L);
+
+        assertThat(response.companyLogo()).isNull();
+        assertThat(response.companyBlobLogo()).startsWith("data:image/png;base64,");
+        verify(customerRepository).findCompanyBlobLogo(4L);
+    }
+
+    @Test
+    void logoBlobIsSkippedWhenALogoFileIsAlreadySaved() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        customer.setCompanyLogo("/api/v1/documents/9/content");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+
+        assertThat(customerService.findById(4L).companyBlobLogo()).isNull();
+        verify(customerRepository, never()).findCompanyBlobLogo(4L);
+    }
+
+    @Test
+    void findByNameReturnsTheOnlyActiveMatch() {
+        Customer customer = new Customer();
+        customer.setCustId(8L);
+        customer.setCustomer("Acme");
+        customer.setRemarks("net 30");
+        when(customerRepository.findActiveByName("acme")).thenReturn(List.of(customer));
+        when(contactRepository.findByCustomerCustIdOrderByContIdAsc(8L)).thenReturn(List.of());
+
+        CustomerResponse response = customerService.findByName("  acme  ");
+
+        assertThat(response.custId()).isEqualTo(8L);
+        assertThat(response.customer()).isEqualTo("Acme");
+        assertThat(response.remarks()).isEqualTo("net 30");
+        verify(customerRepository, never()).findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc();
+    }
+
+    @Test
+    void findByNameRejectsAMissingOrSharedName() {
+        when(customerRepository.findActiveByName("Acme")).thenReturn(List.of());
+        assertThatThrownBy(() -> customerService.findByName("Acme"))
+                .isInstanceOf(CustomerNotFoundException.class);
+
+        Customer first = new Customer();
+        first.setCustId(1L);
+        Customer second = new Customer();
+        second.setCustId(2L);
+        when(customerRepository.findActiveByName("Acme")).thenReturn(List.of(first, second));
+        assertThatThrownBy(() -> customerService.findByName("Acme"))
+                .isInstanceOf(CustomerNotFoundException.class);
+    }
+
+    private static Contact contact(Long contId, Customer customer, String firstName, String lastName) {
+        Contact contact = new Contact();
+        contact.setContId(contId);
+        contact.setCustomer(customer);
+        contact.setFirstName(firstName);
+        contact.setLastName(lastName);
+        return contact;
+    }
+
+    private CustomerRequest request(String customer) {
+        return new CustomerRequest(
+                customer,
+                null,
+                List.of(new CustomerSalesPersonRequest(5L, new BigDecimal("12.50"))),
+                null,
+                null,
+                null,
+                "1 Main Street",
+                "Boston",
+                "MA",
+                "02108",
+                null,
+                null,
+                true,
+                new BigDecimal("12.50")
+        );
+    }
+}

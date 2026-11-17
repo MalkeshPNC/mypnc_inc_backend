@@ -1,0 +1,55 @@
+package com.pnc.masters.configuration;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "tblapp_configurations")
+public class AppConfiguration {
+
+    @Id
+    @Column(name = "config_key", length = 100)
+    private String configKey;
+
+    @Column(name = "config_value", nullable = false, columnDefinition = "TEXT")
+    private String configValue;
+
+    @Column(length = 255)
+    private String description;
+
+    @Column(name = "use_editor", nullable = false)
+    private boolean useEditor;
+
+    @Column(name = "value_type", length = 16, nullable = false)
+    private String valueType;
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    @Column(name = "updated_by", length = 200)
+    private String updatedBy;
+
+    @Column(name = "updated_by_user_id")
+    private Long updatedByUserId;
+
+    public String getConfigKey() { return configKey; }
+    public void setConfigKey(String configKey) { this.configKey = configKey; }
+    public String getConfigValue() { return configValue; }
+    public void setConfigValue(String configValue) { this.configValue = configValue; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public boolean isUseEditor() { return useEditor; }
+    public void setUseEditor(boolean useEditor) { this.useEditor = useEditor; }
+    public String getValueType() { return valueType; }
+    public void setValueType(String valueType) { this.valueType = valueType; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
+    public Long getUpdatedByUserId() { return updatedByUserId; }
+    public void setUpdatedByUserId(Long updatedByUserId) { this.updatedByUserId = updatedByUserId; }
+}

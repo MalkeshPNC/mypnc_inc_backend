@@ -1,0 +1,101 @@
+package com.pnc.masters.security;
+
+import com.pnc.masters.security.api.AuthResponse;
+import com.pnc.masters.security.api.AuthUserResponse;
+import com.pnc.masters.security.api.ChangePasswordRequest;
+import com.pnc.masters.security.api.InvalidCredentialsException;
+import com.pnc.masters.security.api.LoginRequest;
+import com.pnc.masters.security.api.MessageResponse;
+import com.pnc.masters.security.api.ProfileResponse;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@Transactional
+public class AuthService {
+
+    public static final String ROLE_USER = "USER";
+    public static final String ROLE_ADMIN = "ADMIN";
+    public static final String ROLE_SUPER_ADMIN = "SUPER_ADMIN";
+
+    private final AppUserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
+    public AuthService(
+            AppUserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService
+    ) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+    }
+
+    @Transactional(readOnly = true)
+    public AuthResponse login(LoginRequest request) {
+        AppUser user = userRepository.findByUsernameIgnoreCase(request.username().trim())
+                .orElseThrow(InvalidCredentialsException::new);
+        if (!user.isEnabled() || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException();
+        }
+        return toAuthResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileResponse me(Long userId) {
+        return toProfileResponse(requireEnabledUser(userId));
+    }
+
+    public MessageResponse changePassword(Long userId, ChangePasswordRequest request) {
+        AppUser user = requireEnabledUser(userId);
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        userRepository.save(user);
+        return new MessageResponse("Your password has been updated.");
+    }
+
+    private AppUser requireEnabledUser(Long userId) {
+        AppUser user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
+        if (!user.isEnabled()) {
+            throw new InvalidCredentialsException();
+        }
+        return user;
+    }
+
+    AuthResponse toAuthResponse(AppUser user) {
+        AuthUserResponse profile = toUserResponse(user);
+        String token = jwtService.createToken(
+                user.getUserId(),
+                user.getEmail() == null || user.getEmail().isBlank() ? user.getUsername() : user.getEmail(),
+                profile.roles()
+        );
+        return new AuthResponse(token, "Bearer", jwtService.expirationMs(), profile);
+    }
+
+    static AuthUserResponse toUserResponse(AppUser user) {
+        List<String> roles = user.getRoles().stream()
+                .map(Role::getRoleCode)
+                .sorted()
+                .toList();
+        return new AuthUserResponse(user.getUserId(), user.getUsername(), user.getEmail(), user.getDisplayName(), roles);
+    }
+
+    static ProfileResponse toProfileResponse(AppUser user) {
+        return new ProfileResponse(
+                user.getUserId(),
+                user.getEmail(),
+                user.getDisplayName(),
+                user.getDateOfJoining(),
+                user.getDepartment(),
+                user.getBranch(),
+                user.getHomeAddress(),
+                user.getDateOfBirth(),
+                user.getDesignation(),
+                user.getRegularTiming(),
+                user.getContactNumber()
+        );
+    }
+}
