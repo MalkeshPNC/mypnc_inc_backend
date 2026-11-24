@@ -32,6 +32,9 @@ public final class ModuleAccessPolicy {
         if (uri.startsWith("/api/v1/configurations/types")) {
             return AccessDecision.module("CONFIG_MASTERS", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
         }
+        if (!isWrite(http) && uri.startsWith("/api/v1/configurations/")) {
+            return AccessDecision.open();
+        }
         if (uri.startsWith("/api/v1/configurations")) {
             return AccessDecision.module("CONFIG_SETTINGS", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
         }
@@ -49,6 +52,9 @@ public final class ModuleAccessPolicy {
         }
         if (uri.startsWith("/api/v1/quotes") || uri.startsWith("/api/v1/nc-masters")) {
             return AccessDecision.module("QUOTE", isWrite(http) ? ModuleAccessLevel.WRITE : ModuleAccessLevel.READ);
+        }
+        if (uri.startsWith("/api/v1/customers/reminders")) {
+            return AccessDecision.superAdmin();
         }
         if (uri.startsWith("/api/v1/customers") || uri.startsWith("/api/v1/contacts") || uri.startsWith("/api/v1/salespersons")) {
             if (!isWrite(http)) {

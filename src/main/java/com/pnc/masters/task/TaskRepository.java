@@ -11,7 +11,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     List<Task> findAllByOrderByUpdatedAtDescTaskIdDesc();
 
-    List<Task> findByQidOrderByUpdatedAtDescTaskIdDesc(Long qid);
+    List<Task> findByQidOrderByCreatedAtDescTaskIdDesc(Long qid);
 
     @Query("""
             select task from Task task

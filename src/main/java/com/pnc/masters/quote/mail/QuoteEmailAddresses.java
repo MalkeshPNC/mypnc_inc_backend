@@ -3,8 +3,10 @@ package com.pnc.masters.quote.mail;
 import com.pnc.masters.quote.api.QuoteValidationException;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 public final class QuoteEmailAddresses {
@@ -31,6 +33,21 @@ public final class QuoteEmailAddresses {
             emails.add(email.toLowerCase(Locale.ROOT));
         }
         return List.copyOf(emails);
+    }
+
+    /** CC must not repeat an address that is already in To. */
+    public static List<String> without(List<String> addresses, List<String> blocked) {
+        if (addresses.isEmpty() || blocked.isEmpty()) {
+            return addresses;
+        }
+        Set<String> skip = new HashSet<>(blocked);
+        List<String> kept = new ArrayList<>();
+        for (String email : addresses) {
+            if (!skip.contains(email)) {
+                kept.add(email);
+            }
+        }
+        return List.copyOf(kept);
     }
 
     public static void requireLimits(List<String> to, List<String> cc) {

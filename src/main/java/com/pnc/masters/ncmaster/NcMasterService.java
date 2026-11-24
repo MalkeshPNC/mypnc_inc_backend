@@ -3,6 +3,8 @@ package com.pnc.masters.ncmaster;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcMasterResponse;
+import com.pnc.masters.quote.QuoteRepository;
+import com.pnc.masters.quote.api.QuoteLinkResponse;
 import com.pnc.masters.ncmaster.api.NcNumberAvailabilityResponse;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
 import com.pnc.masters.ncmaster.api.PcbaNoteLookupResponse;
@@ -23,22 +25,29 @@ public class NcMasterService {
     private final NcMasterRepository ncMasterRepository;
     private final PcbaNoteRepository pcbaNoteRepository;
     private final AppUserRepository userRepository;
+    private final QuoteRepository quoteRepository;
 
     public NcMasterService(
             NcMasterRepository ncMasterRepository,
             PcbaNoteRepository pcbaNoteRepository,
-            AppUserRepository userRepository
+            AppUserRepository userRepository,
+            QuoteRepository quoteRepository
     ) {
         this.ncMasterRepository = ncMasterRepository;
         this.pcbaNoteRepository = pcbaNoteRepository;
         this.userRepository = userRepository;
+        this.quoteRepository = quoteRepository;
     }
 
     @Transactional(readOnly = true)
     public List<NcMasterResponse> findAll() {
         Map<String, String> notes = notesByPart();
+        Map<Long, Integer> quotes = quoteCounts();
         return ncMasterRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(record -> toResponse(record, notes.get(partKey(record.getPcbaPartNumber()))))
+                .map(record -> toResponse(
+                        record,
+                        notes.get(partKey(record.getPcbaPartNumber())),
+                        quotes.getOrDefault(record.getNcId(), 0)))
                 .toList();
     }
 
@@ -53,7 +62,22 @@ public class NcMasterService {
                 : pcbaNoteRepository.findByPcbaPartNumberIgnoreCase(record.getPcbaPartNumber())
                         .map(PcbaNote::getPcbaNotes)
                         .orElse(null);
-        return toResponse(record, pcbaNotes);
+        return toResponse(record, pcbaNotes, quoteCount(record.getNcId()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<QuoteLinkResponse> quotes(Long ncId) {
+        if (!ncMasterRepository.existsById(ncId)) {
+            throw new NcMasterNotFoundException(ncId);
+        }
+        return quoteRepository.findActiveByNcId(ncId).stream()
+                .map(quote -> new QuoteLinkResponse(
+                        quote.getQid(),
+                        quote.getQuoteNumber(),
+                        quote.getStatus(),
+                        quote.getCustomerName(),
+                        quote.getCreateDate()))
+                .toList();
     }
 
     /**
@@ -95,7 +119,7 @@ public class NcMasterService {
         record.setCreatedBy(user == null ? "Unknown" : user.getDisplayName());
         NcMaster saved = ncMasterRepository.save(record);
         String pcbaNotes = syncPcbaNotes(saved.getPcbaPartNumber(), request.pcbaNotes());
-        return toResponse(saved, pcbaNotes);
+        return toResponse(saved, pcbaNotes, 0);
     }
 
     public NcMasterResponse update(Long id, NcMasterRequest request) {
@@ -107,7 +131,7 @@ public class NcMasterService {
         applyRequest(record, request, ncNumber);
         NcMaster saved = ncMasterRepository.save(record);
         String pcbaNotes = syncPcbaNotes(saved.getPcbaPartNumber(), request.pcbaNotes());
-        return toResponse(saved, pcbaNotes);
+        return toResponse(saved, pcbaNotes, quoteCount(saved.getNcId()));
     }
 
     private void applyRequest(NcMaster record, NcMasterRequest request, String ncNumber) {
@@ -156,7 +180,24 @@ public class NcMasterService {
         return notes;
     }
 
-    private NcMasterResponse toResponse(NcMaster record, String pcbaNotes) {
+    private Map<Long, Integer> quoteCounts() {
+        Map<Long, Integer> counts = new HashMap<>();
+        for (Object[] row : quoteRepository.countByNcId()) {
+            if (row[0] instanceof Number id && row[1] instanceof Number count) {
+                counts.put(id.longValue(), count.intValue());
+            }
+        }
+        return counts;
+    }
+
+    private int quoteCount(Long ncId) {
+        if (ncId == null) {
+            return 0;
+        }
+        return (int) quoteRepository.countActiveByNcId(ncId);
+    }
+
+    private NcMasterResponse toResponse(NcMaster record, String pcbaNotes, int quoteCount) {
         return new NcMasterResponse(
                 record.getNcId(),
                 record.getNcNumber(),
@@ -169,7 +210,8 @@ public class NcMasterService {
                 pcbaNotes,
                 record.getCreatedBy(),
                 record.getCreatedByUserId(),
-                record.getCreatedAt()
+                record.getCreatedAt(),
+                quoteCount
         );
     }
 

@@ -38,6 +38,9 @@ class ModuleAccessPolicyTest {
         assertEquals(module("CONFIG_MASTERS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/configurations/types/3/entries/9"));
         assertEquals(module("CONFIG_SETTINGS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/configurations"));
         assertEquals(module("CONFIG_SETTINGS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/configurations/quote.pdf.note"));
+        assertEquals(AccessDecision.open(), ModuleAccessPolicy.decide("GET", "/api/v1/configurations/salesperson.defaultCommission"));
+        assertEquals(module("CONFIG_SETTINGS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("PUT", "/api/v1/configurations/salesperson.defaultCommission"));
+        assertEquals(module("CONFIG_SETTINGS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("DELETE", "/api/v1/configurations/salesperson.defaultCommission"));
     }
 
     @Test
@@ -59,6 +62,10 @@ class ModuleAccessPolicyTest {
         assertEquals(AccessDecision.Kind.ANY_MODULE, lookup.kind());
         assertEquals(ModuleAccessLevel.READ, lookup.level());
         assertEquals(module("CUSTOMERS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/customers"));
+        assertEquals(AccessDecision.superAdmin(), ModuleAccessPolicy.decide("POST", "/api/v1/customers/reminders/batches"));
+        assertEquals(AccessDecision.superAdmin(), ModuleAccessPolicy.decide("GET", "/api/v1/customers/reminders/audience"));
+        assertEquals(AccessDecision.superAdmin(), ModuleAccessPolicy.decide("GET", "/api/v1/customers/reminders/log"));
+        assertEquals(AccessDecision.superAdmin(), ModuleAccessPolicy.decide("POST", "/api/v1/customers/reminders/batches/3/pause"));
         assertEquals(module("TASKS", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("GET", "/api/v1/tasks"));
         assertEquals(module("TASKS", ModuleAccessLevel.READ), ModuleAccessPolicy.decide("POST", "/api/v1/tasks/4/progress"));
         assertEquals(module("TASKS", ModuleAccessLevel.WRITE), ModuleAccessPolicy.decide("POST", "/api/v1/tasks"));

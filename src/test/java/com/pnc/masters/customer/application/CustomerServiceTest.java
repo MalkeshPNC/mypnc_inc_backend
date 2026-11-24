@@ -8,6 +8,8 @@ import com.pnc.masters.customer.api.CustomerNotFoundException;
 import com.pnc.masters.customer.api.CustomerRequest;
 import com.pnc.masters.customer.api.CustomerSalesPersonRequest;
 import com.pnc.masters.customer.api.CustomerResponse;
+import com.pnc.masters.quote.Quote;
+import com.pnc.masters.quote.QuoteRepository;
 import com.pnc.masters.quote.application.CustomerWinRatio;
 import com.pnc.masters.salesperson.SalesPerson;
 import com.pnc.masters.salesperson.SalesPersonRepository;
@@ -18,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
@@ -44,6 +47,9 @@ class CustomerServiceTest {
 
     @Mock
     private CustomerWinRatio customerWinRatio;
+
+    @Mock
+    private QuoteRepository quoteRepository;
 
     @InjectMocks
     private CustomerService customerService;
@@ -95,6 +101,128 @@ class CustomerServiceTest {
         List<CustomerResponse> response = customerService.findAll();
 
         assertThat(response.get(0).contactPerson()).isEqualTo("Ada Lovelace");
+    }
+
+    @Test
+    void findAllCountsQuotesAndLeavesFollowUpBlank() {
+        Customer active = new Customer();
+        active.setCustId(1L);
+        active.setCustomer("Active customer");
+        active.setFollowupCount(4);
+        when(customerRepository.findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc()).thenReturn(List.of(active));
+        when(quoteRepository.countByCustId()).thenReturn(List.<Object[]>of(new Object[] { 1L, 3L }));
+
+        CustomerResponse response = customerService.findAll().get(0);
+
+        assertThat(response.quoteCount()).isEqualTo(3);
+        assertThat(response.followupCount()).isNull();
+        assertThat(response.lastReminder()).isNull();
+        assertThat(response.followupBy()).isNull();
+        assertThat(response.lastSubmitted()).isNull();
+        assertThat(response.pcbOnly()).isNull();
+    }
+
+    @Test
+    void findByIdReportsFollowUpAndTheLatestSubmittedQuote() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        customer.setFollowupCount(2);
+        customer.setFollowupBy("Sam");
+        customer.setLastReminder(LocalDateTime.of(2026, 5, 1, 9, 0));
+        Quote quote = new Quote();
+        quote.setSubmitDate(LocalDate.of(2026, 4, 2));
+        quote.setQuoteType("R - PCB only");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+        when(quoteRepository.countActiveByCustId(4L)).thenReturn(2L);
+        when(quoteRepository.findSubmittedByCustId(4L)).thenReturn(List.of(quote));
+
+        CustomerResponse response = customerService.findById(4L);
+
+        assertThat(response.quoteCount()).isEqualTo(2);
+        assertThat(response.followupCount()).isEqualTo(2);
+        assertThat(response.followupBy()).isEqualTo("Sam");
+        assertThat(response.lastReminder()).isEqualTo(LocalDateTime.of(2026, 5, 1, 9, 0));
+        assertThat(response.lastSubmitted()).isEqualTo(LocalDate.of(2026, 4, 2));
+        assertThat(response.pcbOnly()).isTrue();
+    }
+
+    @Test
+    void findByIdTreatsOtherQuoteTypesAsNotPcbOnly() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        customer.setCustomer("Acme");
+        Quote quote = new Quote();
+        quote.setSubmitDate(LocalDate.of(2026, 4, 2));
+        quote.setQuoteType("Turnkey");
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+        when(quoteRepository.findSubmittedByCustId(4L)).thenReturn(List.of(quote));
+
+        assertThat(customerService.findById(4L).pcbOnly()).isFalse();
+        assertThat(customerService.findById(4L).lastSubmitted()).isEqualTo(LocalDate.of(2026, 4, 2));
+    }
+
+    @Test
+    void quotesReturnsActiveRowsForThatCustomer() {
+        Customer customer = new Customer();
+        customer.setCustId(4L);
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.of(customer));
+        Quote quote = new Quote();
+        quote.setQid(12L);
+        quote.setQuoteNumber("2026NC-100");
+        quote.setStatus("Open");
+        quote.setCustomerName("Acme");
+        quote.setCreateDate(LocalDate.of(2026, 9, 2));
+        when(quoteRepository.findActiveByCustId(4L)).thenReturn(List.of(quote));
+
+        var quotes = customerService.quotes(4L);
+
+        assertThat(quotes).hasSize(1);
+        assertThat(quotes.get(0).qid()).isEqualTo(12L);
+        assertThat(quotes.get(0).quoteNumber()).isEqualTo("2026NC-100");
+        assertThat(quotes.get(0).status()).isEqualTo("Open");
+        assertThat(quotes.get(0).customerName()).isEqualTo("Acme");
+        assertThat(quotes.get(0).createDate()).isEqualTo(LocalDate.of(2026, 9, 2));
+    }
+
+    @Test
+    void quotesRejectsAnUnknownCustomer() {
+        when(customerRepository.findByCustIdAndIsDeletedFalse(4L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> customerService.quotes(4L)).isInstanceOf(CustomerNotFoundException.class);
+    }
+
+    @Test
+    void updateDoesNotClearFollowUpFields() {
+        LocalDateTime entryDate = LocalDateTime.of(2026, 1, 15, 9, 30);
+        LocalDateTime reminder = LocalDateTime.of(2026, 3, 1, 8, 0);
+        Customer existing = new Customer();
+        existing.setCustId(6L);
+        existing.setCustomer("Acme Inc");
+        existing.setCustEntryDt(entryDate);
+        existing.setFollowupCount(5);
+        existing.setFollowupBy("Ada");
+        existing.setLastReminder(reminder);
+        LocalDateTime announcement = LocalDateTime.of(2026, 4, 2, 11, 15);
+        existing.setAnnouncementFollowupCount(3);
+        existing.setLastAnnouncement(announcement);
+        SalesPerson salesPerson = new SalesPerson();
+        salesPerson.setSpId(5L);
+        salesPerson.setSalesPerson("Sales Person");
+        when(salesPersonRepository.findById(5L)).thenReturn(Optional.of(salesPerson));
+        when(customerRepository.findByCustIdAndIsDeletedFalse(6L)).thenReturn(Optional.of(existing));
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CustomerResponse response = customerService.update(6L, request("Acme Inc"));
+
+        assertThat(existing.getFollowupCount()).isEqualTo(5);
+        assertThat(existing.getFollowupBy()).isEqualTo("Ada");
+        assertThat(existing.getLastReminder()).isEqualTo(reminder);
+        assertThat(existing.getAnnouncementFollowupCount()).isEqualTo(3);
+        assertThat(existing.getLastAnnouncement()).isEqualTo(announcement);
+        assertThat(response.followupCount()).isEqualTo(5);
+        assertThat(response.followupBy()).isEqualTo("Ada");
+        assertThat(response.lastReminder()).isEqualTo(reminder);
     }
 
     @Test

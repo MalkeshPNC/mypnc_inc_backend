@@ -14,6 +14,7 @@ public record NcMasterResponse(
         String pcbaNotes,
         String createdBy,
         Long createdByUserId,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        int quoteCount
 ) {
 }

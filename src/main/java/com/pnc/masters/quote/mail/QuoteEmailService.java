@@ -110,7 +110,7 @@ public class QuoteEmailService {
         }
         Quote quote = requireQuote(qid);
         List<String> to = QuoteEmailAddresses.parse(request.to());
-        List<String> cc = QuoteEmailAddresses.parse(request.cc());
+        List<String> cc = QuoteEmailAddresses.without(QuoteEmailAddresses.parse(request.cc()), to);
         QuoteEmailAddresses.requireLimits(to, cc);
         String subject = request.subject() == null ? "" : request.subject().trim();
         if (subject.isBlank()) {

@@ -1,6 +1,7 @@
 package com.pnc.masters.customer.api;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -22,6 +23,12 @@ public record CustomerResponse(
         BigDecimal salesPersonDefaultCommission,
         String contactPerson,
         String companyBlobLogo,
-        Integer currentYearWinRatio
+        Integer currentYearWinRatio,
+        int quoteCount,
+        Integer followupCount,
+        LocalDateTime lastReminder,
+        String followupBy,
+        LocalDate lastSubmitted,
+        Boolean pcbOnly
 ) {
 }

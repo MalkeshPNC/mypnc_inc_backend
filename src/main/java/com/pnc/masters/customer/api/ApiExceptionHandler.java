@@ -13,6 +13,9 @@ import com.pnc.masters.configuration.api.SubConfigurationTypeExistsException;
 import com.pnc.masters.configuration.api.SubConfigurationTypeNotFoundException;
 import com.pnc.masters.configuration.api.SubConfigurationValidationException;
 import com.pnc.masters.contact.api.ContactNotFoundException;
+import com.pnc.masters.customer.reminder.ReminderConflictException;
+import com.pnc.masters.customer.reminder.ReminderNotFoundException;
+import com.pnc.masters.customer.reminder.ReminderValidationException;
 import com.pnc.masters.devtrack.api.DevTrackForbiddenException;
 import com.pnc.masters.devtrack.api.DevTrackNotFoundException;
 import com.pnc.masters.devtrack.api.DevTrackValidationException;
@@ -121,6 +124,21 @@ public class ApiExceptionHandler {
     @ExceptionHandler(QuoteValidationException.class)
     public ResponseEntity<Map<String, Object>> handleQuoteValidation(QuoteValidationException exception) {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ReminderValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleReminderValidation(ReminderValidationException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ReminderNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleReminderNotFound(ReminderNotFoundException exception) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(ReminderConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleReminderConflict(ReminderConflictException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), Map.of());
     }
 
     @ExceptionHandler(PcbInventoryNotFoundException.class)

@@ -3,6 +3,8 @@ package com.pnc.masters.ncmaster;
 import com.pnc.masters.ncmaster.api.NcMasterNotFoundException;
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcNumberExistsException;
+import com.pnc.masters.quote.Quote;
+import com.pnc.masters.quote.QuoteRepository;
 import com.pnc.masters.security.AppUser;
 import com.pnc.masters.security.AppUserRepository;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +31,7 @@ class NcMasterServiceTest {
     @Mock private NcMasterRepository ncMasterRepository;
     @Mock private PcbaNoteRepository pcbaNoteRepository;
     @Mock private AppUserRepository userRepository;
+    @Mock private QuoteRepository quoteRepository;
 
     @InjectMocks
     private NcMasterService service;
@@ -159,6 +164,7 @@ class NcMasterServiceTest {
         PcbaNote note = new PcbaNote();
         note.setPcbaNotes("watch the pads");
         when(pcbaNoteRepository.findByPcbaPartNumberIgnoreCase("PCBA-1")).thenReturn(Optional.of(note));
+        when(quoteRepository.countActiveByNcId(4L)).thenReturn(2L);
 
         var response = service.findByNumber(" nc-100 ");
 
@@ -166,7 +172,36 @@ class NcMasterServiceTest {
         assertThat(response.ncNumber()).isEqualTo("NC-100");
         assertThat(response.notes()).isEqualTo("keep the rev");
         assertThat(response.pcbaNotes()).isEqualTo("watch the pads");
+        assertThat(response.quoteCount()).isEqualTo(2);
         verify(ncMasterRepository, never()).findAllByOrderByCreatedAtDesc();
+    }
+
+    @Test
+    void quotesReturnsActiveRowsForThatNc() {
+        when(ncMasterRepository.existsById(4L)).thenReturn(true);
+        Quote quote = new Quote();
+        quote.setQid(12L);
+        quote.setQuoteNumber("2026NC-100");
+        quote.setStatus("Open");
+        quote.setCustomerName("Acme");
+        quote.setCreateDate(LocalDate.of(2026, 9, 2));
+        when(quoteRepository.findActiveByNcId(4L)).thenReturn(List.of(quote));
+
+        var quotes = service.quotes(4L);
+
+        assertThat(quotes).hasSize(1);
+        assertThat(quotes.get(0).qid()).isEqualTo(12L);
+        assertThat(quotes.get(0).quoteNumber()).isEqualTo("2026NC-100");
+        assertThat(quotes.get(0).status()).isEqualTo("Open");
+        assertThat(quotes.get(0).customerName()).isEqualTo("Acme");
+        assertThat(quotes.get(0).createDate()).isEqualTo(LocalDate.of(2026, 9, 2));
+    }
+
+    @Test
+    void quotesRejectsAnUnknownNc() {
+        when(ncMasterRepository.existsById(4L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.quotes(4L)).isInstanceOf(NcMasterNotFoundException.class);
     }
 
     @Test

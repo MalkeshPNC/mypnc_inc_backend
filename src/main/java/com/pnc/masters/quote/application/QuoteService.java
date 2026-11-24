@@ -176,7 +176,11 @@ public class QuoteService {
             }
             Expression<String> column = searchColumn(root, field);
             if (!text.isEmpty() && column != null) {
-                predicates.add(cb.like(cb.lower(column), likePattern(text), '\\'));
+                if (exactSearch(field)) {
+                    predicates.add(cb.equal(cb.lower(cb.trim(column)), text));
+                } else {
+                    predicates.add(cb.like(cb.lower(column), likePattern(text), '\\'));
+                }
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
@@ -194,8 +198,18 @@ public class QuoteService {
             case "assyNumber" -> root.get("assyNumber");
             case "pcbNumber" -> root.get("pcbNumber");
             case "assyQuotePerson" -> root.get("assyQuotePerson");
+            case "assyQuoteStatus" -> root.get("assyQuoteStatus");
             case "pcbQuotePerson" -> root.get("pcbQuotePerson");
+            case "pcbQuoteStatus" -> root.get("pcbQuoteStatus");
             default -> null;
+        };
+    }
+
+    /** Person and AQ/PQ status come from a list, so the match is the whole value. */
+    private static boolean exactSearch(String field) {
+        return switch (field) {
+            case "assyQuotePerson", "assyQuoteStatus", "pcbQuotePerson", "pcbQuoteStatus" -> true;
+            default -> false;
         };
     }
 

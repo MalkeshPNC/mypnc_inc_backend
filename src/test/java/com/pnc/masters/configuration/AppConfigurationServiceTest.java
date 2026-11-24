@@ -65,6 +65,20 @@ class AppConfigurationServiceTest {
     }
 
     @Test
+    void findByKeyReturnsOneSetting() {
+        AppConfiguration existing = new AppConfiguration();
+        existing.setConfigKey("salesperson.defaultCommission");
+        existing.setConfigValue("12.5");
+        existing.setDescription("Default commission");
+        when(repository.findById("salesperson.defaultCommission")).thenReturn(Optional.of(existing));
+
+        ConfigurationResponse response = service.findByKey("salesperson.defaultCommission");
+
+        assertThat(response.configKey()).isEqualTo("salesperson.defaultCommission");
+        assertThat(response.configValue()).isEqualTo("12.5");
+    }
+
+    @Test
     void updateReplacesValue() {
         AppConfiguration existing = new AppConfiguration();
         existing.setConfigKey("salesperson.defaultCommission");

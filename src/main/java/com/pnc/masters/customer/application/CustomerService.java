@@ -10,6 +10,9 @@ import com.pnc.masters.customer.api.CustomerRequest;
 import com.pnc.masters.customer.api.CustomerResponse;
 import com.pnc.masters.customer.api.CustomerSalesPersonRequest;
 import com.pnc.masters.customer.api.CustomerNotFoundException;
+import com.pnc.masters.quote.Quote;
+import com.pnc.masters.quote.QuoteRepository;
+import com.pnc.masters.quote.api.QuoteLinkResponse;
 import com.pnc.masters.quote.application.CustomerWinRatio;
 import com.pnc.masters.salesperson.SalesPerson;
 import com.pnc.masters.salesperson.SalesPersonRepository;
@@ -18,8 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -32,23 +37,30 @@ public class CustomerService {
     private final SalesPersonRepository salesPersonRepository;
     private final ContactRepository contactRepository;
     private final CustomerWinRatio customerWinRatio;
+    private final QuoteRepository quoteRepository;
 
     public CustomerService(CustomerRepository customerRepository,
                            SalesPersonRepository salesPersonRepository,
                            ContactRepository contactRepository,
-                           CustomerWinRatio customerWinRatio) {
+                           CustomerWinRatio customerWinRatio,
+                           QuoteRepository quoteRepository) {
         this.customerRepository = customerRepository;
         this.salesPersonRepository = salesPersonRepository;
         this.contactRepository = contactRepository;
         this.customerWinRatio = customerWinRatio;
+        this.quoteRepository = quoteRepository;
     }
 
     @Transactional(readOnly = true)
     public List<CustomerResponse> findAll() {
         List<Customer> customers = customerRepository.findAllByIsDeletedFalseOrderByCustEntryDtDescCustIdDesc();
         Map<Long, String> firstContacts = firstContactNames(customers.stream().map(Customer::getCustId).toList());
+        Map<Long, Integer> quotes = quoteCounts();
         return customers.stream()
-                .map(customer -> toResponse(customer, firstContacts.get(customer.getCustId())))
+                .map(customer -> toResponse(
+                        customer,
+                        firstContacts.get(customer.getCustId()),
+                        quotes.getOrDefault(customer.getCustId(), 0)))
                 .toList();
     }
 
@@ -61,6 +73,23 @@ public class CustomerService {
     public CustomerResponse findById(Long id, boolean includeWinRatio) {
         Customer customer = getCustomer(id);
         return toResponse(customer, firstContactName(customer.getCustId()), true, includeWinRatio);
+    }
+
+    @Transactional(readOnly = true)
+    public List<QuoteLinkResponse> quotes(Long custId) {
+        getCustomer(custId);
+        List<Quote> quotes = quoteRepository.findActiveByCustId(custId);
+        if (quotes == null) {
+            return List.of();
+        }
+        return quotes.stream()
+                .map(quote -> new QuoteLinkResponse(
+                        quote.getQid(),
+                        quote.getQuoteNumber(),
+                        quote.getStatus(),
+                        quote.getCustomerName(),
+                        quote.getCreateDate()))
+                .toList();
     }
 
     /**
@@ -218,14 +247,24 @@ public class CustomerService {
     }
 
     private CustomerResponse toResponse(Customer customer, String contactPerson) {
-        return toResponse(customer, contactPerson, false);
+        return toResponse(customer, contactPerson, false, false, quoteCount(customer.getCustId()));
+    }
+
+    private CustomerResponse toResponse(Customer customer, String contactPerson, int quoteCount) {
+        return toResponse(customer, contactPerson, false, false, quoteCount);
     }
 
     private CustomerResponse toResponse(Customer customer, String contactPerson, boolean includeBlobLogo) {
-        return toResponse(customer, contactPerson, includeBlobLogo, false);
+        return toResponse(customer, contactPerson, includeBlobLogo, false, quoteCount(customer.getCustId()));
     }
 
     private CustomerResponse toResponse(Customer customer, String contactPerson, boolean includeBlobLogo, boolean includeWinRatio) {
+        return toResponse(customer, contactPerson, includeBlobLogo, includeWinRatio, quoteCount(customer.getCustId()));
+    }
+
+    private CustomerResponse toResponse(Customer customer, String contactPerson,
+                                        boolean includeBlobLogo, boolean includeWinRatio, int quoteCount) {
+        Quote latestSubmitted = includeBlobLogo ? latestSubmitted(customer.getCustId()) : null;
         return new CustomerResponse(
                 customer.getCustId(),
                 customer.getCustomer(),
@@ -249,8 +288,55 @@ public class CustomerService {
                 customer.getSalesPersonDefaultCommission(),
                 contactPerson,
                 includeBlobLogo ? blobPreview(customer) : null,
-                includeWinRatio ? customerWinRatio.currentYear(customer.getCustId(), customer.getCustomer()) : null
+                includeWinRatio ? customerWinRatio.currentYear(customer.getCustId(), customer.getCustomer()) : null,
+                quoteCount,
+                includeBlobLogo ? customer.getFollowupCount() : null,
+                includeBlobLogo ? customer.getLastReminder() : null,
+                includeBlobLogo ? customer.getFollowupBy() : null,
+                latestSubmitted == null ? null : latestSubmitted.getSubmitDate(),
+                includeBlobLogo ? pcbOnly(latestSubmitted) : null
         );
+    }
+
+    private Map<Long, Integer> quoteCounts() {
+        Map<Long, Integer> counts = new HashMap<>();
+        List<Object[]> rows = quoteRepository.countByCustId();
+        if (rows == null) {
+            return counts;
+        }
+        for (Object[] row : rows) {
+            if (row[0] instanceof Number id && row[1] instanceof Number count) {
+                counts.put(id.longValue(), count.intValue());
+            }
+        }
+        return counts;
+    }
+
+    private int quoteCount(Long custId) {
+        if (custId == null) {
+            return 0;
+        }
+        return (int) quoteRepository.countActiveByCustId(custId);
+    }
+
+    private Quote latestSubmitted(Long custId) {
+        if (custId == null) {
+            return null;
+        }
+        List<Quote> quotes = quoteRepository.findSubmittedByCustId(custId);
+        if (quotes == null || quotes.isEmpty()) {
+            return null;
+        }
+        return quotes.get(0);
+    }
+
+    /** True when the quote type contains "pcb only", including a prefixed label such as "R - PCB only". */
+    private static boolean pcbOnly(Quote quote) {
+        if (quote == null || quote.getQuoteType() == null) {
+            return false;
+        }
+        String type = quote.getQuoteType().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        return type.contains("pcb only");
     }
 
     /** Data URL for preview and the quote PDF. Omitted when a saved logo file already exists. */

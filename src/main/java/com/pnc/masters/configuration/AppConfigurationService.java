@@ -32,6 +32,11 @@ public class AppConfigurationService {
         return repository.findAllByOrderByConfigKeyAsc().stream().map(this::toResponse).toList();
     }
 
+    @Transactional(readOnly = true)
+    public ConfigurationResponse findByKey(String key) {
+        return toResponse(getConfiguration(key));
+    }
+
     public ConfigurationResponse create(ConfigurationCreateRequest request, Long userId) {
         String key = request.configKey().trim();
         if (repository.existsById(key)) {

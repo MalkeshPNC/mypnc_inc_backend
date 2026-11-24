@@ -147,6 +147,11 @@ public class AppConfigurationController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{key:.+}")
+    public ConfigurationResponse findByKey(@PathVariable String key) {
+        return configurationService.findByKey(key);
+    }
+
     @PutMapping("/{key:.+}")
     public ConfigurationResponse update(
             @PathVariable String key,

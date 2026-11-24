@@ -23,6 +23,13 @@ class QuoteEmailAddressesTest {
     }
 
     @Test
+    void dropsCcAddressesThatAreAlreadyInTo() {
+        List<String> to = QuoteEmailAddresses.parse("Jane@Example.com");
+        List<String> cc = QuoteEmailAddresses.parse("jane@example.com, sam@example.com");
+        assertThat(QuoteEmailAddresses.without(cc, to)).containsExactly("sam@example.com");
+    }
+
+    @Test
     void requiresAToAddressAndCapsTheTotal() {
         assertThatThrownBy(() -> QuoteEmailAddresses.requireLimits(List.of(), List.of()))
                 .isInstanceOf(QuoteValidationException.class)

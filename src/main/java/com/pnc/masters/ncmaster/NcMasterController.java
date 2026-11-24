@@ -2,6 +2,7 @@ package com.pnc.masters.ncmaster;
 
 import com.pnc.masters.ncmaster.api.NcMasterRequest;
 import com.pnc.masters.ncmaster.api.NcMasterResponse;
+import com.pnc.masters.quote.api.QuoteLinkResponse;
 import com.pnc.masters.ncmaster.api.NcNumberAvailabilityResponse;
 import com.pnc.masters.ncmaster.api.PcbaNoteLookupResponse;
 import jakarta.validation.Valid;
@@ -63,6 +64,11 @@ public class NcMasterController {
         URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}")
                 .buildAndExpand(response.ncId()).toUri();
         return ResponseEntity.created(location).body(response);
+    }
+
+    @GetMapping("/{id}/quotes")
+    public List<QuoteLinkResponse> quotes(@PathVariable Long id) {
+        return ncMasterService.quotes(id);
     }
 
     @PutMapping("/{id}")

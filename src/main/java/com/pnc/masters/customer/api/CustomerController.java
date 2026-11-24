@@ -1,6 +1,7 @@
 package com.pnc.masters.customer.api;
 
 import com.pnc.masters.customer.application.CustomerService;
+import com.pnc.masters.quote.api.QuoteLinkResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -36,6 +37,11 @@ public class CustomerController {
     public CustomerResponse findByName(@RequestParam String name,
                                        @RequestParam(defaultValue = "false") boolean includeWinRatio) {
         return customerService.findByName(name, includeWinRatio);
+    }
+
+    @GetMapping("/{id}/quotes")
+    public List<QuoteLinkResponse> quotes(@PathVariable Long id) {
+        return customerService.quotes(id);
     }
 
     @GetMapping("/{id}")

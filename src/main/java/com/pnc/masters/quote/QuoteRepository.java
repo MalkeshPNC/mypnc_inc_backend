@@ -112,4 +112,101 @@ public interface QuoteRepository extends JpaRepository<Quote, Long>, JpaSpecific
             GROUP BY LOWER(TRIM(q.ncNumber))
             """)
     List<Object[]> countByNcNumber(@Param("ncNumbers") Collection<String> ncNumbers);
+
+    /** How many non-deleted quotes are stored against each NC id. */
+    @Query("""
+            SELECT q.ncId, COUNT(q)
+            FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.ncId IS NOT NULL
+            GROUP BY q.ncId
+            """)
+    List<Object[]> countByNcId();
+
+    @Query("""
+            SELECT COUNT(q) FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.ncId = :ncId
+            """)
+    long countActiveByNcId(@Param("ncId") Long ncId);
+
+    @Query("""
+            SELECT q FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.ncId = :ncId
+            ORDER BY q.createdAt DESC, q.qid DESC
+            """)
+    List<Quote> findActiveByNcId(@Param("ncId") Long ncId);
+
+    /** How many non-deleted quotes are stored against each customer. */
+    @Query("""
+            SELECT q.custId, COUNT(q)
+            FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.custId IS NOT NULL
+            GROUP BY q.custId
+            """)
+    List<Object[]> countByCustId();
+
+    @Query("""
+            SELECT COUNT(q) FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.custId = :custId
+            """)
+    long countActiveByCustId(@Param("custId") Long custId);
+
+    @Query("""
+            SELECT q FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.custId = :custId
+            ORDER BY q.createdAt DESC, q.qid DESC
+            """)
+    List<Quote> findActiveByCustId(@Param("custId") Long custId);
+
+    /**
+     * Submitted quotes for one customer, newest submit date first.
+     * The first row is the quote we last gave that customer.
+     */
+    @Query("""
+            SELECT q FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.custId = :custId
+              AND q.submitDate IS NOT NULL
+            ORDER BY q.submitDate DESC, q.qid DESC
+            """)
+    List<Quote> findSubmittedByCustId(@Param("custId") Long custId);
+
+    /**
+     * Submitted quotes for reminder lists. Newest submit date per customer is the
+     * one that decides Last Submitted and PCB Only.
+     */
+    @Query("""
+            SELECT q.custId, q.qid, q.submitDate, q.quoteType
+            FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.custId IS NOT NULL
+              AND q.submitDate IS NOT NULL
+            """)
+    List<Object[]> findSubmittedFacts();
+
+    /** Customers with a non-deleted quote that has a received date. That quote is an order. */
+    @Query("""
+            SELECT DISTINCT q.custId
+            FROM Quote q
+            WHERE q.isDeleted = false
+              AND q.custId IS NOT NULL
+              AND q.receivedDate IS NOT NULL
+            """)
+    List<Long> findCustomerIdsWithReceivedDate();
+
+    /** Customers with a quantity line marked received. That line is an order. */
+    @Query("""
+            SELECT DISTINCT q.custId
+            FROM Quote q
+            JOIN q.quantities qty
+            WHERE q.isDeleted = false
+              AND q.custId IS NOT NULL
+              AND qty.received = true
+            """)
+    List<Long> findCustomerIdsWithReceivedLine();
 }

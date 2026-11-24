@@ -65,6 +65,23 @@ public class Customer {
     @Column(name = "automail_on", nullable = false)
     private boolean automailOn;
 
+    /** How many no-lead follow-ups have been sent. The reminder job increments this. */
+    @Column(name = "followup_count", nullable = false)
+    private int followupCount;
+
+    @Column(name = "last_reminder")
+    private LocalDateTime lastReminder;
+
+    @Column(name = "followup_by", length = 200)
+    private String followupBy;
+
+    /** How many announcement emails have been sent. Stays 0 until one is marked sent. */
+    @Column(name = "announcement_followup_count", nullable = false)
+    private int announcementFollowupCount;
+
+    @Column(name = "last_announcement")
+    private LocalDateTime lastAnnouncement;
+
     @Column(name = "isDeleted", nullable = false)
     private boolean isDeleted = false;
 
@@ -112,6 +129,18 @@ public class Customer {
     public void setShiptoAddress(String shiptoAddress) { this.shiptoAddress = shiptoAddress; }
     public boolean isAutomailOn() { return automailOn; }
     public void setAutomailOn(boolean automailOn) { this.automailOn = automailOn; }
+    public int getFollowupCount() { return followupCount; }
+    public void setFollowupCount(int followupCount) { this.followupCount = followupCount; }
+    public LocalDateTime getLastReminder() { return lastReminder; }
+    public void setLastReminder(LocalDateTime lastReminder) { this.lastReminder = lastReminder; }
+    public String getFollowupBy() { return followupBy; }
+    public void setFollowupBy(String followupBy) { this.followupBy = followupBy; }
+    public int getAnnouncementFollowupCount() { return announcementFollowupCount; }
+    public void setAnnouncementFollowupCount(int announcementFollowupCount) {
+        this.announcementFollowupCount = announcementFollowupCount;
+    }
+    public LocalDateTime getLastAnnouncement() { return lastAnnouncement; }
+    public void setLastAnnouncement(LocalDateTime lastAnnouncement) { this.lastAnnouncement = lastAnnouncement; }
     public boolean isDeleted() { return isDeleted; }
     public void setDeleted(boolean deleted) { isDeleted = deleted; }
     public List<Contact> getContacts() { return contacts; }

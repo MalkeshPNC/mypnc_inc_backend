@@ -133,7 +133,7 @@ public class TaskService {
         if (qid == null) {
             return List.of();
         }
-        return respond(tasks.findByQidOrderByUpdatedAtDescTaskIdDesc(qid));
+        return respond(tasks.findByQidOrderByCreatedAtDescTaskIdDesc(qid));
     }
 
     private List<TaskResponse> respond(List<Task> rows) {
