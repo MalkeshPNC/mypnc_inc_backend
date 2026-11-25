@@ -128,7 +128,18 @@ public class NcMasterService {
         if (ncMasterRepository.existsByNcNumberIgnoreCaseAndNcIdNot(ncNumber, id)) {
             throw new NcNumberExistsException(ncNumber);
         }
+        boolean usedOnQuote = quoteCount(record.getNcId()) > 0;
+        String pcbPartNumber = record.getPcbPartNumber();
+        String pcbRev = record.getPcbRev();
+        String pcbaPartNumber = record.getPcbaPartNumber();
+        String pcbaRev = record.getPcbaRev();
         applyRequest(record, request, ncNumber);
+        if (usedOnQuote) {
+            record.setPcbPartNumber(pcbPartNumber);
+            record.setPcbRev(pcbRev);
+            record.setPcbaPartNumber(pcbaPartNumber);
+            record.setPcbaRev(pcbaRev);
+        }
         NcMaster saved = ncMasterRepository.save(record);
         String pcbaNotes = syncPcbaNotes(saved.getPcbaPartNumber(), request.pcbaNotes());
         return toResponse(saved, pcbaNotes, quoteCount(saved.getNcId()));

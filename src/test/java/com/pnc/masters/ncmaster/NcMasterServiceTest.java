@@ -139,6 +139,32 @@ class NcMasterServiceTest {
     }
 
     @Test
+    void updateKeepsPartFieldsWhenTheNcIsOnAQuote() {
+        NcMaster existing = new NcMaster();
+        existing.setNcId(2L);
+        existing.setNcNumber("NC-200");
+        existing.setPcbPartNumber("PCB-1");
+        existing.setPcbRev("A");
+        existing.setPcbaPartNumber("PCBA-1");
+        existing.setPcbaRev("B");
+        when(ncMasterRepository.findById(2L)).thenReturn(Optional.of(existing));
+        when(ncMasterRepository.existsByNcNumberIgnoreCaseAndNcIdNot("NC-200", 2L)).thenReturn(false);
+        when(quoteRepository.countActiveByNcId(2L)).thenReturn(1L);
+        when(ncMasterRepository.save(any(NcMaster.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pcbaNoteRepository.findByPcbaPartNumberIgnoreCase("PCBA-1")).thenReturn(Optional.empty());
+
+        var response = service.update(2L, new NcMasterRequest(
+                "NC-200", "PCB-9", "Z", "PCBA-9", "Y", "still editable", null, null
+        ));
+
+        assertThat(response.pcbPartNumber()).isEqualTo("PCB-1");
+        assertThat(response.pcbRev()).isEqualTo("A");
+        assertThat(response.pcbaPartNumber()).isEqualTo("PCBA-1");
+        assertThat(response.pcbaRev()).isEqualTo("B");
+        assertThat(response.notes()).isEqualTo("still editable");
+    }
+
+    @Test
     void updateRejectsDuplicateNumber() {
         NcMaster existing = new NcMaster();
         existing.setNcId(2L);

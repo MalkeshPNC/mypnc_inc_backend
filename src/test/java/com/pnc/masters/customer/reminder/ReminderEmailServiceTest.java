@@ -96,6 +96,7 @@ class ReminderEmailServiceTest {
         verify(batches).save(batch.capture());
         assertThat(batch.getValue().getStatus()).isEqualTo(ReminderBatch.RUNNING);
         assertThat(batch.getValue().getStartedByName()).isEqualTo("Ada Lovelace");
+        assertThat(batch.getValue().getStartedByUserId()).isEqualTo(9L);
         ArgumentCaptor<ReminderRecipient> row = ArgumentCaptor.forClass(ReminderRecipient.class);
         verify(recipients).save(row.capture());
         assertThat(row.getValue().getStatus()).isEqualTo(ReminderRecipient.PENDING);

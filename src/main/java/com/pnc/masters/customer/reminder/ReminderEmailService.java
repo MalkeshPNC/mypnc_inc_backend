@@ -669,6 +669,7 @@ public class ReminderEmailService {
                 batch.getCcRecipients(),
                 batch.getStatus(),
                 batch.getStartedByName(),
+                batch.getStartedByUserId(),
                 batch.getCreatedAt(),
                 fileRows,
                 people,
